@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM Academia Intrade</title>
+  <link rel="icon" type="image/png" href="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120">
+
+  <!-- Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100vh; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #050010;
+      color: #fff;
+      line-height: 1.5;
+      background: radial-gradient(ellipse at top, #1A1F3D 0%, #050010 70%);
+    }
+
+    /* ============ LOGIN ============ */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(245, 184, 0, 0.2);
+      border-radius: 20px;
+      padding: 40px 32px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .login-logo img { width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 4px 12px rgba(245,184,0,0.3); }
+    .login-logo .text { display: flex; flex-direction: column; line-height: 1.1; }
+    .login-logo small {
+      font-size: 10px; letter-spacing: 2.5px; color: #FFC832; font-weight: 700;
+      text-transform: uppercase;
+    }
+    .login-logo .name { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; letter-spacing: 1.5px; }
+    .login-card h1 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .login-card .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 28px;
+    }
+    .login-form label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .login-form input {
+      width: 100%;
+      padding: 13px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 15px;
+      font-family: inherit;
+      margin-bottom: 14px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .login-form input:focus { outline: none; border-color: #F5B800; background: rgba(245,184,0,0.04); }
+    .login-form .remember {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: rgba(255,255,255,0.7);
+      margin-bottom: 18px; cursor: pointer;
+      user-select: none;
+    }
+    .login-form .remember input { width: auto; margin: 0; }
+    .btn-primary {
+      width: 100%;
+      padding: 14px 18px;
+      background: #F5B800;
+      color: #0B1131;
+      border: none;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(245,184,0,0.3); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 22px 0;
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+      letter-spacing: 1.5px;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: rgba(255,255,255,0.1);
+    }
+    .google-btn-container { display: flex; justify-content: center; }
+    .login-error {
+      background: rgba(255,107,107,0.08);
+      border: 1px solid rgba(255,107,107,0.3);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #FF6B6B;
+      font-size: 13.5px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .login-error.show { display: block; }
+
+    /* ============ APP (post-login) ============ */
+    .app { display: none; min-height: 100vh; }
+    .app.show { display: block; }
+
+    .app-nav {
+      background: rgba(11, 17, 49, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(245,184,0,0.15);
+      padding: 12px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .app-nav-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .app-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+    }
+    .app-logo img { width: 32px; height: 32px; border-radius: 7px; box-shadow: 0 2px 8px rgba(245,184,0,0.3); }
+    .app-logo .accent { color: #F5B800; }
+    .app-tabs {
+      display: flex; gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .app-tabs::-webkit-scrollbar { display: none; }
+    .app-tab {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: all 0.18s;
+    }
+    .app-tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .app-tab.active { color: #F5B800; background: rgba(245,184,0,0.1); border-color: rgba(245,184,0,0.3); }
+    .user-info {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+    }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #F5B800, #D49A00);
+      display: flex; align-items: center; justify-content: center;
+      color: #0B1131; font-weight: 900; font-size: 13px;
+    }
+    .user-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .btn-logout {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.7);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.18s;
+    }
+    .btn-logout:hover { color: #fff; border-color: #FF6B6B; }
+
+    .app-main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 20px;
+    }
+
+    /* ============ DASHBOARD STATS ============ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 18px 20px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .stat-card:hover { border-color: rgba(245,184,0,0.3); }
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-card .value {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 32px;
+      font-weight: 900;
+      line-height: 1;
+      color: #fff;
+    }
+    .stat-card .value.gold { color: #F5B800; }
+    .stat-card .extra {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 6px;
+    }
+
+    .section-title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .badge {
+      background: rgba(245,184,0,0.15);
+      color: #FFC832;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* ============ TABLAS ============ */
+    .table-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .table-controls input,
+    .table-controls select {
+      padding: 9px 13px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .table-controls input { flex: 1; min-width: 200px; }
+    .table-controls input:focus,
+    .table-controls select:focus { outline: none; border-color: #F5B800; }
+
+    .table-wrap {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      overflow: hidden;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead {
+      background: rgba(11,17,49,0.5);
+    }
+    th {
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #FFC832;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(245,184,0,0.15);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.85);
+      vertical-align: middle;
+    }
+    tr:hover td { background: rgba(245,184,0,0.04); }
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .pill.green { background: rgba(0,200,150,0.15); color: #00C896; }
+    .pill.red { background: rgba(255,107,107,0.15); color: #FF6B6B; }
+    .pill.yellow { background: rgba(245,184,0,0.15); color: #FFC832; }
+    .pill.gray { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+    .pill.blue { background: rgba(70,130,200,0.15); color: #6FA8E0; }
+
+    .pill-flag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+    }
+    .pill-flag img {
+      width: 16px; height: 12px; border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+    }
+
+    .table-loading,
+    .table-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: rgba(255,255,255,0.5);
+      font-size: 14px;
+    }
+
+    /* ============ EVENTOS ============ */
+    .eventos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .evento-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .evento-card .grupo {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(245,184,0,0.15);
+      color: #FFC832;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .evento-card .fecha {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .evento-card .hora {
+      color: #F5B800;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+    .evento-card .descripcion {
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .evento-card .stats-evento {
+      display: flex; gap: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .evento-card .stat-mini {
+      flex: 1;
+    }
+    .evento-card .stat-mini .num {
+      font-size: 24px;
+      font-weight: 900;
+      color: #fff;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .evento-card .stat-mini .lbl {
+      font-size: 10px;
+      letter-spacing: 1.2px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    /* ============ MODAL DETALLE ============ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 0, 16, 0.85);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #0B1131;
+      border: 1px solid rgba(245,184,0,0.25);
+      border-radius: 16px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      position: relative;
+    }
+    .modal .close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.6);
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .modal .close:hover { color: #fff; border-color: #FF6B6B; }
+    .detail-section {
+      margin-bottom: 18px;
+    }
+    .detail-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #FFC832;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px 18px;
+    }
+    .detail-grid .item .lbl {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .detail-grid .item .val {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    /* ============ MOBILE ============ */
+    @media (max-width: 768px) {
+      .app-nav-inner { flex-wrap: wrap; gap: 10px; }
+      .app-tabs { order: 3; width: 100%; }
+      .app-main { padding: 18px 14px; }
+      .stat-card .value { font-size: 24px; }
+      .stat-card { padding: 14px 16px; }
+      th, td { padding: 9px 10px; font-size: 12px; }
+      .modal { padding: 22px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen" class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120" alt="Money Magnet">
+        <div class="text">
+          <small>ACADEMIA INTRADE</small>
+          <span class="name">CRM <span style="color:#F5B800;">PANEL</span></span>
+        </div>
+      </div>
+      <h1>Iniciar sesi&oacute;n</h1>
+      <p class="subtitle">Accede al panel de administraci&oacute;n.</p>
+
+      <div id="login-error" class="login-error"></div>
+
+      <form class="login-form" id="form-login">
+        <label>Email</label>
+        <input type="email" id="login-email" required autocomplete="email" placeholder="tu@email.com">
+        <label>Contrase&ntilde;a</label>
+        <input type="password" id="login-password" required autocomplete="current-password" placeholder="Contrase&ntilde;a">
+        <label class="remember">
+          <input type="checkbox" id="login-remember" checked>
+          Recu&eacute;rdame en este computador
+        </label>
+        <button type="submit" class="btn-primary" id="btn-login-pwd">Entrar</button>
+      </form>
+
+      <div class="divider">O</div>
+
+      <div class="google-btn-container">
+        <div id="google-signin-btn"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ APP (post-login) ============ -->
+  <div id="app" class="app">
+    <nav class="app-nav">
+      <div class="app-nav-inner">
+        <div class="app-logo">
+          <img src="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120" alt="MM">
+          <span>CRM <span class="accent">INTRADE</span></span>
+        </div>
+        <div class="app-tabs">
+          <button class="app-tab active" data-tab="dashboard">Dashboard</button>
+          <button class="app-tab" data-tab="contactos">Contactos</button>
+          <button class="app-tab" data-tab="pagos">Pagos VIP</button>
+          <button class="app-tab" data-tab="eventos">Eventos</button>
+        </div>
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">N</div>
+          <span id="user-email">--</span>
+          <button class="btn-logout" id="btn-logout">Salir</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="app-main">
+
+      <!-- DASHBOARD -->
+      <section id="tab-dashboard" class="tab-content">
+        <h2 class="section-title">Resumen</h2>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="label">Cargando&hellip;</div></div>
+        </div>
+      </section>
+
+      <!-- CONTACTOS -->
+      <section id="tab-contactos" class="tab-content" style="display:none;">
+        <h2 class="section-title">Contactos <span class="badge" id="contactos-count">0</span></h2>
+        <div class="table-controls">
+          <input type="text" id="filtro-busqueda" placeholder="Buscar por nombre, email, tel&eacute;fono o ticket&hellip;">
+          <select id="filtro-grupo">
+            <option value="">Todos los grupos</option>
+            <option value="latam_bajo">Latam Bajo</option>
+            <option value="latam_alto">Latam Alto</option>
+            <option value="europa">Europa</option>
+          </select>
+          <select id="filtro-vip">
+            <option value="">Todos</option>
+            <option value="si">Solo VIP</option>
+            <option value="no">No VIP</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tabla-contactos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Tel&eacute;fono</th>
+                <th>Pa&iacute;s</th>
+                <th>Grupo</th>
+                <th>VIP</th>
+                <th>Ticket</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-contactos">
+              <tr><td colspan="8" class="table-loading">Cargando contactos&hellip;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PAGOS -->
+      <section id="tab-pagos" class="tab-content" style="display:none;">
+        <h2 class="section-title">Pagos VIP <span class="badge" id="pagos-count">0</span></h2>
+        <div class="table-controls">
+          <select id="filtro-estado">
+            <option value="">Todos los estados</option>
+            <option value="APROBADO">Aprobados</option>
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="DECLINADO">Declinados</option>
+            <option value="EXPIRADO">Expirados</option>
+          </select>
+          <select id="filtro-modo">
+            <option value="">Todos</option>
+            <option value="production">Producci&oacute;n</option>
+            <option value="sandbox">Sandbox</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tabla-pagos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Email</th>
+                <th>Plan</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>M&eacute;todo</th>
+                <th>Modo</th>
+                <th>Referencia</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pagos">
+              <tr><td colspan="8" class="table-loading">Cargando pagos&hellip;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- EVENTOS -->
+      <section id="tab-eventos" class="tab-content" style="display:none;">
+        <h2 class="section-title">Eventos Webinar Money Magnet</h2>
+        <div class="eventos-grid" id="eventos-grid">
+          <div class="evento-card"><div class="grupo">Cargando&hellip;</div></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ MODAL DETALLE ============ -->
+  <div id="modal-detalle" class="modal-overlay" onclick="if(event.target===this)cerrarModal()">
+    <div class="modal">
+      <button class="close" onclick="cerrarModal()">&times;</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // ============ CONFIG ============
+    var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK6XSxi1T4I2hCSZeEScJy7pKhFGs2S1OVtxSmAfc2oFjK1UonFmIGFjGEmJAdTymQ8g/exec';
+
+    // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
+    // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
+    var GOOGLE_CLIENT_ID = '';  // ← Pegar tu Client ID de Google Cloud aquí
+
+    var STORAGE_KEY = 'crm_token';
+    var STORAGE_EMAIL = 'crm_email';
+    var STORAGE_NOMBRE = 'crm_nombre';
+    var STORAGE_FOTO = 'crm_foto';
+
+    var token = null;
+    var userEmail = null;
+    var userNombre = null;
+    var userFoto = null;
+
+    // ============ HELPERS ============
+    function $(id) { return document.getElementById(id); }
+    function show(el) { el.style.display = ''; el.classList.add('show'); }
+    function hide(el) { el.style.display = 'none'; el.classList.remove('show'); }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function formatFecha(iso) {
+      if (!iso) return '-';
+      try {
+        var d = new Date(iso);
+        return d.toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'numeric'}) +
+               ' ' + d.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+      } catch(e) { return String(iso); }
+    }
+
+    function formatPlan(p) {
+      if (p === 'vip_1') return 'VIP 1 Persona';
+      if (p === 'vip_2') return 'VIP 2 Personas';
+      return p || '-';
+    }
+
+    function pillEstado(estado) {
+      if (estado === 'APROBADO') return '<span class="pill green">Aprobado</span>';
+      if (estado === 'PENDIENTE') return '<span class="pill yellow">Pendiente</span>';
+      if (estado === 'DECLINADO') return '<span class="pill red">Declinado</span>';
+      if (estado === 'EXPIRADO') return '<span class="pill red">Expirado</span>';
+      return '<span class="pill gray">' + escapeHtml(estado) + '</span>';
+    }
+
+    // ============ API ============
+    function apiGet(action, params) {
+      var qs = ['action=' + encodeURIComponent(action), 'token=' + encodeURIComponent(token || '')];
+      Object.keys(params || {}).forEach(function(k){
+        if (params[k] !== undefined && params[k] !== null && params[k] !== '') {
+          qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+        }
+      });
+      return fetch(APPS_SCRIPT_URL + '?' + qs.join('&'))
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if (res && res.code === 'AUTH_REQUIRED') {
+            logout();
+            throw new Error('Sesión expirada');
+          }
+          return res;
+        });
+    }
+
+    function apiPost(action, body) {
+      return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ token: token }, body || {}))
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if (res && res.code === 'AUTH_REQUIRED') {
+            logout();
+            throw new Error('Sesión expirada');
+          }
+          return res;
+        });
+    }
+
+    // ============ LOGIN ============
+    function mostrarErrorLogin(msg) {
+      var el = $('login-error');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function(){ el.classList.remove('show'); }, 5000);
+    }
+
+    $('form-login').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var email = $('login-email').value.trim();
+      var password = $('login-password').value;
+      var remember = $('login-remember').checked;
+      var btn = $('btn-login-pwd');
+
+      btn.disabled = true;
+      btn.textContent = 'Entrando…';
+
+      apiPost('crm_login_password', { email: email, password: password })
+        .then(function(res){
+          if (!res.ok) {
+            mostrarErrorLogin(res.error || 'Error al iniciar sesión');
+            btn.disabled = false;
+            btn.textContent = 'Entrar';
+            return;
+          }
+          token = res.token;
+          userEmail = res.email;
+          userNombre = '';
+          userFoto = '';
+          if (remember) {
+            localStorage.setItem(STORAGE_KEY, token);
+            localStorage.setItem(STORAGE_EMAIL, userEmail);
+          } else {
+            sessionStorage.setItem(STORAGE_KEY, token);
+            sessionStorage.setItem(STORAGE_EMAIL, userEmail);
+          }
+          mostrarApp();
+        })
+        .catch(function(err){
+          mostrarErrorLogin('Error de conexión');
+          btn.disabled = false;
+          btn.textContent = 'Entrar';
+        });
+    });
+
+    // ============ GOOGLE SIGN-IN ============
+    window.handleGoogleSignIn = function(response) {
+      apiPost('crm_login_google', { id_token: response.credential })
+        .then(function(res){
+          if (!res.ok) {
+            mostrarErrorLogin(res.error || 'Acceso denegado');
+            return;
+          }
+          token = res.token;
+          userEmail = res.email;
+          userNombre = res.nombre || '';
+          userFoto = res.foto || '';
+          localStorage.setItem(STORAGE_KEY, token);
+          localStorage.setItem(STORAGE_EMAIL, userEmail);
+          if (userNombre) localStorage.setItem(STORAGE_NOMBRE, userNombre);
+          if (userFoto) localStorage.setItem(STORAGE_FOTO, userFoto);
+          mostrarApp();
+        })
+        .catch(function(){
+          mostrarErrorLogin('Error de conexión con Google');
+        });
+    };
+
+    function initGoogleSignIn() {
+      if (!GOOGLE_CLIENT_ID) {
+        $('google-signin-btn').innerHTML =
+          '<p style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;">' +
+          'Google Sign-In no configurado a&uacute;n.</p>';
+        return;
+      }
+      if (typeof google === 'undefined' || !google.accounts) {
+        setTimeout(initGoogleSignIn, 300);
+        return;
+      }
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleSignIn
+      });
+      google.accounts.id.renderButton($('google-signin-btn'), {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular',
+        width: 320
+      });
+    }
+
+    // ============ APP ============
+    function mostrarApp() {
+      hide($('login-screen'));
+      $('app').classList.add('show');
+      // Avatar
+      $('user-email').textContent = userEmail;
+      var avatar = $('user-avatar');
+      if (userFoto) {
+        avatar.innerHTML = '<img src="' + escapeHtml(userFoto) + '" alt="">';
+      } else {
+        avatar.textContent = (userEmail || 'U').charAt(0).toUpperCase();
+      }
+      // Cargar dashboard inicial
+      cargarTab('dashboard');
+    }
+
+    function logout() {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_EMAIL);
+      localStorage.removeItem(STORAGE_NOMBRE);
+      localStorage.removeItem(STORAGE_FOTO);
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(STORAGE_EMAIL);
+      token = null;
+      userEmail = null;
+      location.reload();
+    }
+    $('btn-logout').addEventListener('click', logout);
+
+    // ============ TABS ============
+    document.querySelectorAll('.app-tab').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var tab = this.dataset.tab;
+        document.querySelectorAll('.app-tab').forEach(function(b){ b.classList.remove('active'); });
+        this.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(function(c){ c.style.display = 'none'; });
+        $('tab-' + tab).style.display = '';
+        cargarTab(tab);
+      });
+    });
+
+    function cargarTab(tab) {
+      if (tab === 'dashboard') cargarDashboard();
+      if (tab === 'contactos') cargarContactos();
+      if (tab === 'pagos') cargarPagos();
+      if (tab === 'eventos') cargarEventos();
+    }
+
+    // ============ DASHBOARD ============
+    function cargarDashboard() {
+      apiGet('crm_stats').then(function(res){
+        if (!res.ok) return;
+        var s = res.data;
+        var monedaTotal = s.ingresos_vip ? ('$' + s.ingresos_vip.toFixed(2) + ' USD') : '$0';
+        var html =
+          '<div class="stat-card"><div class="label">Total registrados</div><div class="value gold">' + s.total_contactos + '</div></div>' +
+          '<div class="stat-card"><div class="label">Hoy</div><div class="value">' + s.registros_hoy + '</div><div class="extra">&Uacute;ltimas 24h</div></div>' +
+          '<div class="stat-card"><div class="label">Esta semana</div><div class="value">' + s.registros_semana + '</div><div class="extra">&Uacute;ltimos 7 d&iacute;as</div></div>' +
+          '<div class="stat-card"><div class="label">VIPs pagados</div><div class="value gold">' + s.total_vip_pagados + '</div><div class="extra">' + s.total_vip_1 + ' &times; 1P &middot; ' + s.total_vip_2 + ' &times; 2P</div></div>' +
+          '<div class="stat-card"><div class="label">Ingresos VIP</div><div class="value gold">' + monedaTotal + '</div><div class="extra">Solo producci&oacute;n</div></div>' +
+          '<div class="stat-card"><div class="label">Por grupo</div>' +
+            '<div class="value" style="font-size:18px;">' +
+            (s.por_grupo.latam_bajo||0) + ' / ' + (s.por_grupo.latam_alto||0) + ' / ' + (s.por_grupo.europa||0) +
+            '</div><div class="extra">Latam-B / Latam-A / Europa</div></div>';
+        $('stats-grid').innerHTML = html;
+      });
+    }
+
+    // ============ CONTACTOS ============
+    var contactosTimer = null;
+    function cargarContactos() {
+      var params = {
+        q: $('filtro-busqueda').value,
+        grupo: $('filtro-grupo').value,
+        vip: $('filtro-vip').value,
+        limit: 200
+      };
+      apiGet('crm_contactos', params).then(function(res){
+        if (!res.ok) return;
+        var rows = res.data.rows;
+        $('contactos-count').textContent = res.data.total;
+        if (rows.length === 0) {
+          $('tbody-contactos').innerHTML = '<tr><td colspan="8" class="table-empty">No hay contactos que coincidan</td></tr>';
+          return;
+        }
+        var html = rows.map(function(c){
+          var paisCode = (c.pais || '').toLowerCase().substring(0,2);
+          var bandera = paisCode ? '<span class="pill-flag"><img src="https://flagcdn.com/16x12/' + paisCode + '.png" alt=""> ' + escapeHtml(c.pais) + '</span>' : '-';
+          var esVIP = String(c.etiquetas || '').indexOf('vip_pagado') >= 0;
+          return '<tr style="cursor:pointer;" onclick="abrirDetalleContacto(\'' + escapeHtml(c.email) + '\')">' +
+            '<td>' + formatFecha(c.fecha_registro) + '</td>' +
+            '<td>' + escapeHtml(c.nombre + ' ' + (c.apellido||'')).trim() + '</td>' +
+            '<td>' + escapeHtml(c.email) + '</td>' +
+            '<td>' + escapeHtml(c.telefono || '-') + '</td>' +
+            '<td>' + bandera + '</td>' +
+            '<td><span class="pill blue">' + escapeHtml(c.grupo) + '</span></td>' +
+            '<td>' + (esVIP ? '<span class="pill green">VIP</span>' : '<span class="pill gray">Gratis</span>') + '</td>' +
+            '<td style="font-family:monospace;font-size:11px;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+        $('tbody-contactos').innerHTML = html;
+      });
+    }
+
+    ['filtro-busqueda', 'filtro-grupo', 'filtro-vip'].forEach(function(id){
+      $(id).addEventListener('input', function(){
+        clearTimeout(contactosTimer);
+        contactosTimer = setTimeout(cargarContactos, 300);
+      });
+    });
+
+    // ============ PAGOS ============
+    function cargarPagos() {
+      var params = {
+        estado: $('filtro-estado').value,
+        modo: $('filtro-modo').value
+      };
+      apiGet('crm_pagos', params).then(function(res){
+        if (!res.ok) return;
+        var rows = res.data.rows;
+        $('pagos-count').textContent = res.data.total;
+        if (rows.length === 0) {
+          $('tbody-pagos').innerHTML = '<tr><td colspan="8" class="table-empty">No hay pagos que coincidan</td></tr>';
+          return;
+        }
+        var html = rows.map(function(p){
+          return '<tr>' +
+            '<td>' + formatFecha(p.fecha) + '</td>' +
+            '<td>' + escapeHtml(p.email) + '</td>' +
+            '<td>' + formatPlan(p.plan) + '</td>' +
+            '<td>$' + escapeHtml(String(p.amount)) + ' ' + escapeHtml(p.currency) + '</td>' +
+            '<td>' + pillEstado(p.estado) + '</td>' +
+            '<td>' + escapeHtml(p.paymentMethod || '-') + '</td>' +
+            '<td>' + (p.modo === 'production' ? '<span class="pill green">Prod</span>' : '<span class="pill yellow">Sandbox</span>') + '</td>' +
+            '<td style="font-family:monospace;font-size:10px;color:rgba(255,255,255,0.5);">' + escapeHtml(p.referenceCode) + '</td>' +
+            '</tr>';
+        }).join('');
+        $('tbody-pagos').innerHTML = html;
+      });
+    }
+
+    $('filtro-estado').addEventListener('change', cargarPagos);
+    $('filtro-modo').addEventListener('change', cargarPagos);
+
+    // ============ EVENTOS ============
+    function cargarEventos() {
+      apiGet('crm_eventos').then(function(res){
+        if (!res.ok) return;
+        var eventos = res.data.eventos;
+        var html = eventos.map(function(ev){
+          return '<div class="evento-card">' +
+            '<div class="grupo">' + escapeHtml(ev.grupo) + '</div>' +
+            '<div class="fecha">' + escapeHtml(ev.fecha) + '</div>' +
+            '<div class="hora">' + escapeHtml(ev.hora) + ' &middot; ' + escapeHtml(ev.timezone) + '</div>' +
+            '<div class="descripcion">' + escapeHtml(ev.descripcion) + '</div>' +
+            '<div class="stats-evento">' +
+              '<div class="stat-mini"><div class="num">' + (ev.total_registrados || 0) + '</div><div class="lbl">Registrados</div></div>' +
+              '<div class="stat-mini"><div class="num" style="color:#FFC832;">' + (ev.vip_pagados || 0) + '</div><div class="lbl">VIP pagados</div></div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+        $('eventos-grid').innerHTML = html;
+      });
+    }
+
+    // ============ MODAL DETALLE CONTACTO ============
+    window.abrirDetalleContacto = function(email) {
+      apiGet('crm_contacto_detalle', { email: email }).then(function(res){
+        if (!res.ok || !res.data.contacto) return;
+        var c = res.data.contacto;
+        var pagos = res.data.pagos || [];
+
+        var pagosHtml = pagos.length === 0 ? '<p style="color:rgba(255,255,255,0.5);font-size:13px;">Sin pagos registrados</p>' :
+          pagos.map(function(p){
+            return '<div style="background:rgba(255,255,255,0.04);padding:12px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;">' +
+              '<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><strong>' + formatPlan(p.plan) + '</strong>' + pillEstado(p.estado) + '</div>' +
+              '<div style="color:rgba(255,255,255,0.6);font-size:12px;">$' + escapeHtml(String(p.amount)) + ' ' + escapeHtml(p.currency) + ' &middot; ' + formatFecha(p.fecha_intencion) + '</div>' +
+              '<div style="color:rgba(255,255,255,0.4);font-size:11px;font-family:monospace;margin-top:4px;">' + escapeHtml(p.referenceCode) + '</div>' +
+            '</div>';
+          }).join('');
+
+        $('modal-content').innerHTML =
+          '<h2 style="font-family:Montserrat,sans-serif;font-size:22px;margin-bottom:6px;">' + escapeHtml((c.nombre || '') + ' ' + (c.apellido || '')) + '</h2>' +
+          '<p style="color:rgba(255,255,255,0.6);font-size:13px;margin-bottom:24px;">' + escapeHtml(c.email) + '</p>' +
+          '<div class="detail-section">' +
+            '<h3>Informaci&oacute;n personal</h3>' +
+            '<div class="detail-grid">' +
+              '<div class="item"><div class="lbl">Tel&eacute;fono</div><div class="val">' + escapeHtml(c.telefono || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Pa&iacute;s</div><div class="val">' + escapeHtml(c.pais || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Sexo</div><div class="val">' + (c.sexo === 'M' ? 'Hombre' : c.sexo === 'F' ? 'Mujer' : '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Fecha de registro</div><div class="val">' + formatFecha(c.fecha_registro) + '</div></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Evento</h3>' +
+            '<div class="detail-grid">' +
+              '<div class="item"><div class="lbl">Grupo</div><div class="val">' + escapeHtml(c.grupo_evento || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Fecha del evento</div><div class="val">' + escapeHtml(c.fecha_evento || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Ticket ID</div><div class="val" style="font-family:monospace;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Estado</div><div class="val">' + escapeHtml(c.estado || '-') + '</div></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Etiquetas</h3>' +
+            '<div style="color:rgba(255,255,255,0.7);font-size:13px;">' + escapeHtml(c.etiquetas || 'Sin etiquetas') + '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Pagos VIP (' + pagos.length + ')</h3>' +
+            pagosHtml +
+          '</div>';
+        $('modal-detalle').classList.add('show');
+      });
+    };
+
+    window.cerrarModal = function() {
+      $('modal-detalle').classList.remove('show');
+    };
+
+    // ============ INICIALIZACIÓN ============
+    function init() {
+      // Restaurar sesión si existe
+      token = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+      userEmail = localStorage.getItem(STORAGE_EMAIL) || sessionStorage.getItem(STORAGE_EMAIL);
+      userNombre = localStorage.getItem(STORAGE_NOMBRE) || '';
+      userFoto = localStorage.getItem(STORAGE_FOTO) || '';
+
+      if (token && userEmail) {
+        // Verificar que el token sigue válido haciendo un request liviano
+        apiGet('crm_stats').then(function(res){
+          if (res && res.ok) {
+            mostrarApp();
+          } else {
+            logout();
+          }
+        }).catch(function(){
+          logout();
+        });
+      }
+
+      initGoogleSignIn();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
