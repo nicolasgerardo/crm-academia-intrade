@@ -652,13 +652,25 @@
 
       <!-- EVENTOS -->
       <section id="tab-eventos" class="tab-content" style="display:none;">
-        <h2 class="section-title">Eventos Webinar Money Magnet</h2>
-        <div class="eventos-grid" id="eventos-grid">
-          <div class="evento-card"><div class="grupo">Cargando&hellip;</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Gestor de Eventos</h2>
+          <button class="btn-primario" onclick="nuevoEvento()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo evento</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Controla fechas, links de Teams y precios por sector. Al guardar, los links se sincronizan con los recordatorios automáticos.</p>
+        <div id="eventos-lista">
+          <div style="color:#9CA3AF;">Cargando&hellip;</div>
         </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- ============ MODAL EVENTO ============ -->
+  <div id="modal-evento" class="modal-overlay" onclick="if(event.target===this)cerrarModalEvento()" style="display:none;">
+    <div class="modal" style="max-width:680px;">
+      <button class="close" onclick="cerrarModalEvento()">&times;</button>
+      <div id="modal-evento-content"></div>
+    </div>
   </div>
 
   <!-- ============ MODAL DETALLE ============ -->
@@ -1030,26 +1042,133 @@
     $('filtro-estado').addEventListener('change', cargarPagos);
     $('filtro-modo').addEventListener('change', cargarPagos);
 
-    // ============ EVENTOS ============
+    // ============ GESTOR DE EVENTOS ============
+    var GRUPOS_EVENTO = [
+      { key: 'latam_bajo', label: 'Latam Bajo (Colombia, Perú, etc.)' },
+      { key: 'latam_alto', label: 'Latam Alto + Norteamérica' },
+      { key: 'europa', label: 'Europa' }
+    ];
+    var eventosCache = [];
+
     function cargarEventos() {
-      apiGet('crm_eventos').then(function(res){
-        if (!res.ok) return;
-        var eventos = res.data.eventos;
-        var html = eventos.map(function(ev){
-          return '<div class="evento-card">' +
-            '<div class="grupo">' + escapeHtml(ev.grupo) + '</div>' +
-            '<div class="fecha">' + escapeHtml(ev.fecha) + '</div>' +
-            '<div class="hora">' + escapeHtml(ev.hora) + ' &middot; ' + escapeHtml(ev.timezone) + '</div>' +
-            '<div class="descripcion">' + escapeHtml(ev.descripcion) + '</div>' +
-            '<div class="stats-evento">' +
-              '<div class="stat-mini"><div class="num">' + (ev.total_registrados || 0) + '</div><div class="lbl">Registrados</div></div>' +
-              '<div class="stat-mini"><div class="num" style="color:#FFC832;">' + (ev.vip_pagados || 0) + '</div><div class="lbl">VIP pagados</div></div>' +
-            '</div>' +
+      apiGet('crm_eventos_listar').then(function(res){
+        if (!res.ok) { $('eventos-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(res.error||'') + '</div>'; return; }
+        eventosCache = res.data || [];
+        if (eventosCache.length === 0) {
+          $('eventos-lista').innerHTML = '<div style="color:#9CA3AF;">No hay eventos. Crea uno con "+ Nuevo evento".</div>';
+          return;
+        }
+        var html = eventosCache.map(function(ev){
+          var sectoresResumen = GRUPOS_EVENTO.map(function(g){
+            var s = ev.sectores[g.key] || {};
+            var teams = s.link_teams ? '<span style="color:#34d399;">✓ Teams</span>' : '<span style="color:#f87171;">✗ sin Teams</span>';
+            return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12.5px;">' +
+              '<span style="color:#C9CCD6;">' + escapeHtml(g.label) + '</span>' +
+              '<span>' + (s.fecha_display ? escapeHtml(s.fecha_display) + ' · ' : '') + teams + '</span>' +
+            '</div>';
+          }).join('');
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 20px;margin-bottom:14px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+              '<div><span style="font-weight:700;font-size:16px;">' + escapeHtml(ev.nombre) + '</span>' +
+              (ev.activo ? ' <span style="background:#F5B800;color:#0B1131;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">ACTIVO</span>' : '') + '</div>' +
+              '<button onclick="editarEvento(\'' + ev.evento_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Editar</button>' +
+            '</div>' + sectoresResumen +
           '</div>';
         }).join('');
-        $('eventos-grid').innerHTML = html;
+        $('eventos-lista').innerHTML = html;
       });
     }
+
+    window.nuevoEvento = function() {
+      abrirModalEvento(null);
+    };
+    window.editarEvento = function(id) {
+      var ev = eventosCache.filter(function(e){ return e.evento_id === id; })[0];
+      abrirModalEvento(ev);
+    };
+
+    function abrirModalEvento(ev) {
+      var esNuevo = !ev;
+      ev = ev || { nombre: '', activo: false, sectores: {} };
+
+      var sectoresHtml = GRUPOS_EVENTO.map(function(g){
+        var s = ev.sectores[g.key] || {};
+        return '<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px;margin-bottom:12px;">' +
+          '<div style="font-weight:700;color:#F5B800;font-size:13px;margin-bottom:10px;">' + escapeHtml(g.label) + '</div>' +
+          campo(g.key, 'fecha_display', 'Fecha (texto)', s.fecha_display || '', 'Ej: Jueves 18 de junio') +
+          campo(g.key, 'fecha_iso', 'Fecha ISO (con zona horaria)', s.fecha_iso || '', 'Ej: 2026-06-18T20:00:00-05:00') +
+          campo(g.key, 'hora_texto', 'Hora (texto)', s.hora_texto || '', 'Ej: 8:00 PM (hora Colombia)') +
+          campo(g.key, 'link_teams', '🎥 Link Microsoft Teams', s.link_teams || '', 'https://teams.microsoft.com/...') +
+          campo(g.key, 'whatsapp', 'Link WhatsApp', s.whatsapp || '', 'https://chat.whatsapp.com/...') +
+          campo(g.key, 'telegram', 'Link Telegram', s.telegram || '', 'https://t.me/...') +
+          '<div style="display:flex;gap:10px;">' +
+            campoMini(g.key, 'precio_vip1', 'Precio VIP 1', s.precio_vip1 || 15) +
+            campoMini(g.key, 'precio_vip2', 'Precio VIP 2', s.precio_vip2 || 20) +
+            campoMini(g.key, 'moneda', 'Moneda', s.moneda || 'USD') +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      var html =
+        '<h2 style="margin:0 0 16px;font-size:20px;">' + (esNuevo ? 'Nuevo evento' : 'Editar evento') + '</h2>' +
+        '<input type="hidden" id="ev-id" value="' + escapeHtml(ev.evento_id || '') + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre del evento</label>' +
+        '<input id="ev-nombre" value="' + escapeHtml(ev.nombre) + '" placeholder="Money Magnet" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:14px;box-sizing:border-box;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">' +
+          '<input type="checkbox" id="ev-activo" ' + (ev.activo ? 'checked' : '') + '> Evento activo (sincroniza links con recordatorios y landing)' +
+        '</label>' +
+        sectoresHtml +
+        '<div style="display:flex;gap:10px;margin-top:16px;">' +
+          '<button onclick="guardarEvento()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar evento</button>' +
+          '<button onclick="cerrarModalEvento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+
+      $('modal-evento-content').innerHTML = html;
+      $('modal-evento').style.display = 'flex';
+    }
+
+    function campo(grupo, campo, label, valor, placeholder) {
+      return '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">' + label + '</label>' +
+        '<input data-grupo="' + grupo + '" data-campo="' + campo + '" value="' + escapeHtml(String(valor)) + '" placeholder="' + escapeHtml(placeholder||'') + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;">';
+    }
+    function campoMini(grupo, campo, label, valor) {
+      return '<div style="flex:1;"><label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">' + label + '</label>' +
+        '<input data-grupo="' + grupo + '" data-campo="' + campo + '" value="' + escapeHtml(String(valor)) + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;"></div>';
+    }
+
+    window.cerrarModalEvento = function() {
+      $('modal-evento').style.display = 'none';
+    };
+
+    window.guardarEvento = function() {
+      var sectores = {};
+      GRUPOS_EVENTO.forEach(function(g){ sectores[g.key] = {}; });
+      var inputs = $('modal-evento-content').querySelectorAll('input[data-grupo]');
+      inputs.forEach(function(inp){
+        var g = inp.getAttribute('data-grupo');
+        var c = inp.getAttribute('data-campo');
+        var val = inp.value.trim();
+        if (c === 'precio_vip1' || c === 'precio_vip2') val = parseFloat(val) || 0;
+        sectores[g][c] = val;
+      });
+      var evento = {
+        evento_id: $('ev-id').value || null,
+        nombre: $('ev-nombre').value.trim(),
+        activo: $('ev-activo').checked,
+        sectores: sectores
+      };
+      if (!evento.nombre) { alert('Pon un nombre al evento'); return; }
+
+      apiPost('crm_evento_guardar', { evento: evento }).then(function(res){
+        if (res.ok) {
+          cerrarModalEvento();
+          cargarEventos();
+        } else {
+          alert('Error: ' + (res.error || 'no se pudo guardar'));
+        }
+      });
+    };
+
 
     // ============ MODAL DETALLE CONTACTO ============
     window.abrirDetalleContacto = function(email) {
