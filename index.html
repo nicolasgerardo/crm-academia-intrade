@@ -572,7 +572,12 @@
       <section id="tab-contactos" class="tab-content" style="display:none;">
         <h2 class="section-title">Contactos <span class="badge" id="contactos-count">0</span></h2>
         <div class="table-controls">
-          <input type="text" id="filtro-busqueda" placeholder="Buscar por nombre, email, tel&eacute;fono o ticket&hellip;">
+          <input type="text" id="filtro-busqueda" placeholder="Buscar por nombre, email, tel&eacute;fono, ticket o pa&iacute;s&hellip;">
+          <select id="filtro-origen">
+            <option value="">Todos los contactos</option>
+            <option value="money_magnet" selected>Solo Money Magnet 2026</option>
+            <option value="historico">Solo hist&oacute;rico</option>
+          </select>
           <select id="filtro-grupo">
             <option value="">Todos los grupos</option>
             <option value="latam_bajo">Latam Bajo</option>
@@ -594,13 +599,14 @@
                 <th>Email</th>
                 <th>Tel&eacute;fono</th>
                 <th>Pa&iacute;s</th>
+                <th>Origen</th>
                 <th>Grupo</th>
                 <th>VIP</th>
                 <th>Ticket</th>
               </tr>
             </thead>
             <tbody id="tbody-contactos">
-              <tr><td colspan="8" class="table-loading">Cargando contactos&hellip;</td></tr>
+              <tr><td colspan="9" class="table-loading">Cargando contactos&hellip;</td></tr>
             </tbody>
           </table>
         </div>
@@ -672,7 +678,7 @@
 
     // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
     // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
-    var GOOGLE_CLIENT_ID = '565023966899-jo0ivdrjp4tt5erlm1uothot3i968t53.apps.googleusercontent.com';  // ← Pegar tu Client ID de Google Cloud aquí
+    var GOOGLE_CLIENT_ID = '';  // ← Pegar tu Client ID de Google Cloud aquí
 
     var STORAGE_KEY = 'crm_token';
     var STORAGE_EMAIL = 'crm_email';
@@ -900,14 +906,16 @@
         var s = res.data;
         var monedaTotal = s.ingresos_vip ? ('$' + s.ingresos_vip.toFixed(2) + ' USD') : '$0';
         var html =
-          '<div class="stat-card"><div class="label">Total registrados</div><div class="value gold">' + s.total_contactos + '</div></div>' +
-          '<div class="stat-card"><div class="label">Hoy</div><div class="value">' + s.registros_hoy + '</div><div class="extra">&Uacute;ltimas 24h</div></div>' +
-          '<div class="stat-card"><div class="label">Esta semana</div><div class="value">' + s.registros_semana + '</div><div class="extra">&Uacute;ltimos 7 d&iacute;as</div></div>' +
-          '<div class="stat-card"><div class="label">VIPs pagados</div><div class="value gold">' + s.total_vip_pagados + '</div><div class="extra">' + s.total_vip_1 + ' &times; 1P &middot; ' + s.total_vip_2 + ' &times; 2P</div></div>' +
+          '<div class="stat-card"><div class="label">Total contactos</div><div class="value gold">' + (s.total_contactos || 0) + '</div><div class="extra">Toda la base</div></div>' +
+          '<div class="stat-card"><div class="label">Money Magnet 2026</div><div class="value gold">' + (s.total_money_magnet || 0) + '</div><div class="extra">Webinar pr&oacute;ximo</div></div>' +
+          '<div class="stat-card"><div class="label">Hist&oacute;rico</div><div class="value">' + (s.total_historicos || 0) + '</div><div class="extra">Base anterior</div></div>' +
+          '<div class="stat-card"><div class="label">Hoy</div><div class="value">' + (s.registros_hoy || 0) + '</div><div class="extra">&Uacute;ltimas 24h (MM)</div></div>' +
+          '<div class="stat-card"><div class="label">Esta semana</div><div class="value">' + (s.registros_semana || 0) + '</div><div class="extra">&Uacute;ltimos 7 d&iacute;as (MM)</div></div>' +
+          '<div class="stat-card"><div class="label">VIPs pagados</div><div class="value gold">' + (s.total_vip_pagados || 0) + '</div><div class="extra">' + (s.total_vip_1 || 0) + ' &times; 1P &middot; ' + (s.total_vip_2 || 0) + ' &times; 2P</div></div>' +
           '<div class="stat-card"><div class="label">Ingresos VIP</div><div class="value gold">' + monedaTotal + '</div><div class="extra">Solo producci&oacute;n</div></div>' +
-          '<div class="stat-card"><div class="label">Por grupo</div>' +
+          '<div class="stat-card"><div class="label">Por grupo MM</div>' +
             '<div class="value" style="font-size:18px;">' +
-            (s.por_grupo.latam_bajo||0) + ' / ' + (s.por_grupo.latam_alto||0) + ' / ' + (s.por_grupo.europa||0) +
+            ((s.por_grupo && s.por_grupo.latam_bajo) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.latam_alto) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.europa) || 0) +
             '</div><div class="extra">Latam-B / Latam-A / Europa</div></div>';
         $('stats-grid').innerHTML = html;
       });
@@ -915,32 +923,65 @@
 
     // ============ CONTACTOS ============
     var contactosTimer = null;
+
+    // Mapeo país (texto) → código ISO 2 letras para banderas
+    var PAIS_CODIGO = {
+      'colombia':'co','mexico':'mx','méxico':'mx','peru':'pe','perú':'pe',
+      'argentina':'ar','chile':'cl','ecuador':'ec','venezuela':'ve','bolivia':'bo',
+      'uruguay':'uy','paraguay':'py','costa rica':'cr','panama':'pa','panamá':'pa',
+      'guatemala':'gt','honduras':'hn','el salvador':'sv','nicaragua':'ni',
+      'republica dominicana':'do','dominican republic':'do','cuba':'cu',
+      'puerto rico':'pr','espana':'es','españa':'es','spain':'es',
+      'estados unidos':'us','united states':'us','usa':'us','eeuu':'us',
+      'brasil':'br','brazil':'br','italia':'it','francia':'fr','alemania':'de',
+      'reino unido':'gb','uk':'gb','portugal':'pt','holanda':'nl','suiza':'ch'
+    };
+    function codigoBandera(paisTxt) {
+      var p = String(paisTxt || '').toLowerCase().trim();
+      if (!p) return '';
+      if (PAIS_CODIGO[p]) return PAIS_CODIGO[p];
+      // Si ya es código de 2 letras
+      if (p.length === 2) return p;
+      return '';
+    }
+
     function cargarContactos() {
       var params = {
         q: $('filtro-busqueda').value,
+        origen: $('filtro-origen').value,
         grupo: $('filtro-grupo').value,
         vip: $('filtro-vip').value,
-        limit: 200
+        limit: 500
       };
       apiGet('crm_contactos', params).then(function(res){
         if (!res.ok) return;
         var rows = res.data.rows;
         $('contactos-count').textContent = res.data.total;
         if (rows.length === 0) {
-          $('tbody-contactos').innerHTML = '<tr><td colspan="8" class="table-empty">No hay contactos que coincidan</td></tr>';
+          $('tbody-contactos').innerHTML = '<tr><td colspan="9" class="table-empty">No hay contactos que coincidan</td></tr>';
           return;
         }
         var html = rows.map(function(c){
-          var paisCode = (c.pais || '').toLowerCase().substring(0,2);
-          var bandera = paisCode ? '<span class="pill-flag"><img src="https://flagcdn.com/16x12/' + paisCode + '.png" alt=""> ' + escapeHtml(c.pais) + '</span>' : '-';
+          var code = codigoBandera(c.pais);
+          var paisTxt = c.pais ? c.pais.charAt(0).toUpperCase() + c.pais.slice(1) : '-';
+          var bandera = code
+            ? '<span class="pill-flag"><img src="https://flagcdn.com/16x12/' + code + '.png" alt=""> ' + escapeHtml(paisTxt) + '</span>'
+            : (c.pais ? escapeHtml(paisTxt) : '-');
           var esVIP = String(c.etiquetas || '').indexOf('vip_pagado') >= 0;
+          var origenPill = c.es_money_magnet
+            ? '<span class="pill yellow">MM 2026</span>'
+            : '<span class="pill gray">Hist&oacute;rico</span>';
+          var grupoTxt = c.grupo
+            ? '<span class="pill blue">' + escapeHtml(c.grupo) + '</span>'
+            : '-';
           return '<tr style="cursor:pointer;" onclick="abrirDetalleContacto(\'' + escapeHtml(c.email) + '\')">' +
-            '<td>' + formatFecha(c.fecha_registro) + '</td>' +
-            '<td>' + escapeHtml(c.nombre + ' ' + (c.apellido||'')).trim() + '</td>' +
+            '<td>' + (c.fecha_registro ? formatFecha(c.fecha_registro) : '-') + '</td>' +
+            '<td>' + escapeHtml((c.nombre + ' ' + (c.apellido||'')).trim() || '-') + '</td>' +
             '<td>' + escapeHtml(c.email) + '</td>' +
-            '<td>' + escapeHtml(c.telefono || '-') + '</td>' +
+            '<td>' + escapeHtml(c.telefono || c.whatsapp || '-') + '</td>' +
             '<td>' + bandera + '</td>' +
-            '<td><span class="pill blue">' + escapeHtml(c.grupo) + '</span></td>' +
+            '<td>' + origenPill + '</td>' +
+            '<td>' + grupoTxt + '</td>' +
             '<td>' + (esVIP ? '<span class="pill green">VIP</span>' : '<span class="pill gray">Gratis</span>') + '</td>' +
             '<td style="font-family:monospace;font-size:11px;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</td>' +
             '</tr>';
@@ -949,7 +990,7 @@
       });
     }
 
-    ['filtro-busqueda', 'filtro-grupo', 'filtro-vip'].forEach(function(id){
+    ['filtro-busqueda', 'filtro-origen', 'filtro-grupo', 'filtro-vip'].forEach(function(id){
       $(id).addEventListener('input', function(){
         clearTimeout(contactosTimer);
         contactosTimer = setTimeout(cargarContactos, 300);
