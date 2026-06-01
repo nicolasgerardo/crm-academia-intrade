@@ -724,7 +724,7 @@
 
     // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
     // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
-    var GOOGLE_CLIENT_ID = '1017716219810-5bu75fnjf54m0o6euauhgdl2rorb12oo.apps.googleusercontent.com';  // ← Pegar tu Client ID de Google Cloud aquí
+    var GOOGLE_CLIENT_ID = '1017716219810-5bu75fnjf54m0o6euauhgdl2rorb12oo.apps.googleusercontent.com';
 
     var STORAGE_KEY = 'crm_token';
     var STORAGE_EMAIL = 'crm_email';
@@ -790,14 +790,9 @@
     }
 
     function apiPost(action, body) {
-      var datos = JSON.stringify(Object.assign({ token: token }, body || {}));
-      // Apps Script lee de forma fiable form-urlencoded en e.parameter.
-      // Mandamos el JSON en el campo "data".
-      var formBody = 'data=' + encodeURIComponent(datos);
       return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: formBody
+        body: JSON.stringify(Object.assign({ token: token }, body || {}))
       })
         .then(function(r){ return r.json(); })
         .then(function(res){
