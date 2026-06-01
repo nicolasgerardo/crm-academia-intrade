@@ -790,10 +790,11 @@
     }
 
     function apiPost(action, body) {
+      var datos = Object.assign({ action: action, token: token }, body || {});
       return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({ token: token }, body || {})),
+        body: JSON.stringify(datos),
         redirect: 'follow'
       })
         .then(function(r){ return r.json(); })
