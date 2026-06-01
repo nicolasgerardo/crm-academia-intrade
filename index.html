@@ -790,10 +790,14 @@
     }
 
     function apiPost(action, body) {
+      var datos = JSON.stringify(Object.assign({ token: token }, body || {}));
+      // Apps Script lee de forma fiable form-urlencoded en e.parameter.
+      // Mandamos el JSON en el campo "data".
+      var formBody = 'data=' + encodeURIComponent(datos);
       return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({ token: token }, body || {}))
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: formBody
       })
         .then(function(r){ return r.json(); })
         .then(function(res){
