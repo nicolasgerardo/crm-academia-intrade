@@ -724,7 +724,7 @@
 
     // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
     // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
-    var GOOGLE_CLIENT_ID = '1017716219810-5bu75fnjf54m0o6euauhgdl2rorb12oo.apps.googleusercontent.com';  // ← Pegar tu Client ID de Google Cloud aquí
+    var GOOGLE_CLIENT_ID = '';  // ← Pegar tu Client ID de Google Cloud aquí
 
     var STORAGE_KEY = 'crm_token';
     var STORAGE_EMAIL = 'crm_email';
@@ -1253,9 +1253,12 @@
         var d = res.data;
         $('perfil-nombre').value = d.nombre || '';
         $('perfil-email-rec').value = d.email_recuperacion || '';
-        $('oauth-estado').textContent = d.google_oauth_activo
+        // El Client ID vive en el frontend (constante GOOGLE_CLIENT_ID)
+        var activo = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.indexOf('apps.googleusercontent.com') >= 0);
+        $('oauth-estado').textContent = activo
           ? '✓ Google OAuth está activo. Puedes iniciar sesión con tu cuenta de Google.'
-          : 'Google OAuth no está configurado. Para activarlo, pega tu Client ID de Google Cloud Console en la constante GOOGLE_CLIENT_ID del código y vuelve a desplegar.';
+          : 'Google OAuth no está configurado. Pega tu Client ID en la constante GOOGLE_CLIENT_ID del código.';
+        $('oauth-estado').style.color = activo ? '#34d399' : '#9CA3AF';
       });
     }
 
