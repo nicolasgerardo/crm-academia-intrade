@@ -792,6 +792,7 @@
     function apiPost(action, body) {
       return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
         method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ token: token }, body || {}))
       })
         .then(function(r){ return r.json(); })
