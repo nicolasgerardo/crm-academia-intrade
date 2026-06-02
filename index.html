@@ -560,6 +560,7 @@
         </div>
         <div class="app-tabs">
           <button class="app-tab active" data-tab="dashboard">Dashboard</button>
+          <button class="app-tab" data-tab="misleads">Mis Leads</button>
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
           <button class="app-tab" data-tab="eventos">Eventos</button>
@@ -583,6 +584,16 @@
         <div class="stats-grid" id="stats-grid">
           <div class="stat-card"><div class="label">Cargando&hellip;</div></div>
         </div>
+      </section>
+
+      <!-- MIS LEADS -->
+      <section id="tab-misleads" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Mis Leads <span class="badge" id="misleads-count">0</span></h2>
+          <button onclick="cargarMisLeads()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-refresh"></i> Actualizar</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Trabaja tus leads asignados. Al cerrar un lead, el sistema te asigna otro automáticamente (máximo 5 a la vez).</p>
+        <div id="misleads-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
       </section>
 
       <!-- CONTACTOS -->
@@ -996,6 +1007,7 @@
 
     function cargarTab(tab) {
       if (tab === 'dashboard') cargarDashboard();
+      if (tab === 'misleads') cargarMisLeads();
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
       if (tab === 'eventos') cargarEventos();
@@ -1364,6 +1376,120 @@
       var dispHora = $('disp-hora-' + grupoKey);
       if (dispFecha) dispFecha.value = fechaTxt;
       if (dispHora) dispHora.value = horaTxt + tzTxt;
+    };
+
+    // ============ MIS LEADS ============
+    var LEAD_ESTADOS_CACHE = null;
+    var misLeadsCache = [];
+
+    function cargarMisLeads() {
+      $('misleads-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
+      // Primero cargar los estados disponibles (una vez)
+      var pasoEstados = LEAD_ESTADOS_CACHE
+        ? Promise.resolve({ ok: true, data: LEAD_ESTADOS_CACHE })
+        : apiGet('crm_leads_estados');
+      pasoEstados.then(function(resE){
+        if (resE.ok) LEAD_ESTADOS_CACHE = resE.data;
+        return apiPost('crm_mis_leads', {});
+      }).then(function(res){
+        if (!res.ok) { $('misleads-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        misLeadsCache = res.data || [];
+        $('misleads-count').textContent = misLeadsCache.length;
+        renderMisLeads(res.max || 5);
+      }).catch(function(){
+        $('misleads-lista').innerHTML = '<div style="color:#f87171;">Error de conexión</div>';
+      });
+    }
+
+    function etiquetaEstado(val){
+      if (!LEAD_ESTADOS_CACHE) return val;
+      var e = LEAD_ESTADOS_CACHE.filter(function(x){return x.val===val;})[0];
+      return e ? e.label : val;
+    }
+
+    function renderMisLeads(max){
+      if (misLeadsCache.length === 0){
+        $('misleads-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento. <br>Puede que no haya leads disponibles en el pool.</div>';
+        return;
+      }
+      var opcionesEstado = (LEAD_ESTADOS_CACHE||[]).map(function(e){
+        return '<option value="' + e.val + '">' + escapeHtml(e.label) + '</option>';
+      }).join('');
+
+      $('misleads-lista').innerHTML = '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + misLeadsCache.length + ' de ' + max + ' cupos usados</div>' +
+      misLeadsCache.map(function(L, i){
+        var nombre = (L.nombre || '') + ' ' + (L.apellido || '');
+        nombre = nombre.trim() || L.lead_email;
+        var tel = L.telefono || L.whatsapp || '';
+        var wa = (L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
+
+        // Badge de estado actual
+        var estadoColor = '#9CA3AF';
+        if (L.estado === 'no_contactado') estadoColor = '#60a5fa';
+        else if (L.estado === 'no_respondio') estadoColor = '#f59e0b';
+        else if (['confirmado','confirmado_whatsapp','vip_llamada','vip_adicional'].indexOf(L.estado)>=0) estadoColor = '#34d399';
+        else if (['duplicado','erroneo'].indexOf(L.estado)>=0) estadoColor = '#f87171';
+
+        var intentosTxt = (L.estado === 'no_respondio' && L.intentos > 0)
+          ? '<span style="font-size:11px;color:#f59e0b;margin-left:6px;">· ' + L.intentos + ' intento(s)</span>'
+          : '';
+
+        var botonesContacto = '';
+        if (wa) botonesContacto += '<a href="https://wa.me/' + wa + '" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>';
+        if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-phone"></i> Llamar</a>';
+
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div>' +
+              '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' +
+              (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + '</div>' : '') +
+            '</div>' +
+            '<span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto +
+            '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-phone-off"></i> No respondió</button>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+            '<select id="estado-' + i + '" style="flex:1;min-width:180px;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + opcionesEstado + '</select>' +
+            '<button onclick="aplicarEstado(' + i + ',\'' + escapeHtml(L.lead_email) + '\')" style="background:#F5B800;color:#0B1131;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">Guardar estado</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      // Preseleccionar el estado actual en cada select
+      misLeadsCache.forEach(function(L, i){
+        var sel = $('estado-' + i);
+        if (sel) sel.value = L.estado;
+      });
+    }
+
+    window.marcarNoRespondio = function(leadEmail){
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){
+        if (res.ok){
+          if (res.liberado) alert(res.mensaje || 'Lead liberado al pool');
+          else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.');
+          cargarMisLeads();
+        } else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    window.aplicarEstado = function(i, leadEmail){
+      var nuevoEstado = $('estado-' + i).value;
+      var extra = {};
+      if (nuevoEstado === 'acompanante'){
+        var dq = prompt('¿De quién es acompañante? (nombre o correo del lead principal)');
+        if (dq === null) return;
+        extra.acompanante_de = dq;
+      }
+      if (nuevoEstado === 'no_respondio'){
+        // usar el flujo con contador
+        return window.marcarNoRespondio(leadEmail);
+      }
+      apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: nuevoEstado }, extra)).then(function(res){
+        if (res.ok){ cargarMisLeads(); }
+        else { alert('Error: ' + (res.error||'')); }
+      });
     };
 
     // ============ TITANES (solo admin) ============
