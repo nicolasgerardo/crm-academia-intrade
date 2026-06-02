@@ -566,6 +566,7 @@
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
           <button class="app-tab" data-tab="eventos">Eventos</button>
+          <button class="app-tab" data-tab="metricas">Métricas</button>
           <button class="app-tab" data-tab="titanes">Titanes</button>
           <button class="app-tab" data-tab="cuenta">Cuenta</button>
         </div>
@@ -711,6 +712,38 @@
         <div id="eventos-lista">
           <div style="color:#9CA3AF;">Cargando&hellip;</div>
         </div>
+      </section>
+
+      <!-- MÉTRICAS -->
+      <section id="tab-metricas" class="tab-content" style="display:none;">
+        <h2 class="section-title" style="margin:0 0 6px;">Métricas y rendimiento</h2>
+        <div style="background:linear-gradient(135deg,rgba(245,184,0,0.08),rgba(245,184,0,0.02));border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:14px 18px;margin-bottom:18px;">
+          <p style="color:#E5E7EB;font-size:13px;line-height:1.5;margin:0;">Rendimiento de cada Titán. El sistema sugiere ascensos y descensos según tus umbrales, pero <b style="color:#F5B800;">tú confirmas</b> cada cambio de rango.</p>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+          <select id="metricas-periodo" onchange="cargarMetricas()" style="padding:9px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">
+            <option value="semana">Esta semana</option>
+            <option value="campania">Todo el ciclo de campaña</option>
+          </select>
+          <button onclick="cargarMetricas()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar</button>
+          <button onclick="abrirUmbrales()" style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Configurar umbrales</button>
+        </div>
+
+        <div id="umbrales-panel" style="display:none;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+          <h3 style="margin:0 0 12px;font-size:14px;color:#60a5fa;">Umbrales de ascenso/descenso</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:140px;"><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:4px;">Cierres para SUBIR</label>
+              <input type="number" id="umb-ascenso" min="1" style="width:100%;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;"></div>
+            <div style="flex:1;min-width:140px;"><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:4px;">Cierres (o menos) para BAJAR</label>
+              <input type="number" id="umb-descenso" min="0" style="width:100%;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;"></div>
+            <div style="flex:1;min-width:140px;"><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:4px;">Mín. contactados (actividad)</label>
+              <input type="number" id="umb-mincont" min="0" style="width:100%;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;"></div>
+          </div>
+          <button onclick="guardarUmbrales()" style="background:rgba(96,165,250,0.2);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-top:12px;">Guardar umbrales</button>
+        </div>
+
+        <div id="metricas-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
       </section>
 
       <section id="tab-titanes" class="tab-content" style="display:none;">
@@ -1041,7 +1074,7 @@
 
     // Muestra/oculta pestañas según el rol del usuario
     function aplicarRol() {
-      var soloAdmin = ['eventos', 'titanes', 'pagos', 'contactos'];  // pestañas exclusivas de admin
+      var soloAdmin = ['eventos', 'titanes', 'pagos', 'contactos', 'metricas'];  // pestañas exclusivas de admin
       document.querySelectorAll('.app-tab').forEach(function(btn){
         var tab = btn.dataset.tab;
         if (soloAdmin.indexOf(tab) >= 0) {
@@ -1088,6 +1121,7 @@
       if (tab === 'pagos') cargarPagos();
       if (tab === 'eventos') cargarEventos();
       if (tab === 'titanes') cargarTitanes();
+      if (tab === 'metricas') cargarMetricas();
       if (tab === 'cuenta') cargarCuenta();
     }
 
@@ -1906,6 +1940,70 @@
     window.reprocesarComisiones = function(){
       apiPost('crm_comisiones_reprocesar', {}).then(function(res){
         if (res.ok){ alert('Listo. ' + (res.actualizadas||0) + ' comisión(es) actualizada(s) con su pago.'); cargarComisiones(); }
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
+    // ============ MÉTRICAS Y ASCENSOS (solo admin) ============
+    function cargarMetricas(){
+      var periodo = $('metricas-periodo') ? $('metricas-periodo').value : 'semana';
+      $('metricas-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
+      apiPost('crm_metricas_equipo', { periodo: periodo }).then(function(res){
+        if (!res.ok){ $('metricas-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        var filas = res.data || [];
+        if (res.umbrales){
+          if ($('umb-ascenso')) $('umb-ascenso').value = res.umbrales.ascenso_cierres;
+          if ($('umb-descenso')) $('umb-descenso').value = res.umbrales.descenso_cierres;
+          if ($('umb-mincont')) $('umb-mincont').value = res.umbrales.min_contactados;
+        }
+        if (filas.length === 0){ $('metricas-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay Titanes o datos en este período.</div>'; return; }
+        var tabla = filas.map(function(f, pos){
+          var medalla = pos===0?'🥇':(pos===1?'🥈':(pos===2?'🥉':(pos+1)+'.'));
+          var sugBadge = '', accion = '';
+          if (f.sugerencia === 'subir'){
+            sugBadge = '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">▲ SUBIR a ' + escapeHtml(f.rango_sugerido_nombre) + '</span>';
+            accion = '<button onclick="aplicarCambioRango(\'' + escapeHtml(f.email) + '\',\'' + f.rango_sugerido_id + '\',\'subir\')" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;">Confirmar ascenso</button>';
+          } else if (f.sugerencia === 'bajar'){
+            sugBadge = '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">▼ BAJAR a ' + escapeHtml(f.rango_sugerido_nombre) + '</span>';
+            accion = '<button onclick="aplicarCambioRango(\'' + escapeHtml(f.email) + '\',\'' + f.rango_sugerido_id + '\',\'bajar\')" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;">Confirmar descenso</button>';
+          } else {
+            sugBadge = '<span style="color:#6B7280;font-size:11px;">Mantener</span>';
+          }
+          return '<tr>' +
+            '<td style="padding:10px 8px;font-weight:700;">' + medalla + ' ' + escapeHtml(f.nombre) + '<div style="font-size:11px;color:#6B7280;font-weight:400;">' + escapeHtml(f.rango_nombre) + '</div></td>' +
+            '<td style="padding:10px 8px;text-align:center;">' + f.contactados + '</td>' +
+            '<td style="padding:10px 8px;text-align:center;">' + f.confirmados + '</td>' +
+            '<td style="padding:10px 8px;text-align:center;font-weight:700;color:#F5B800;">' + f.cierres + '</td>' +
+            '<td style="padding:10px 8px;text-align:center;">' + f.tasa_conversion + '%</td>' +
+            '<td style="padding:10px 8px;text-align:center;color:#34d399;font-weight:600;">$' + f.comision + '</td>' +
+            '<td style="padding:10px 8px;">' + sugBadge + (accion?'<div style="margin-top:6px;">'+accion+'</div>':'') + '</td>' +
+          '</tr>';
+        }).join('');
+        $('metricas-lista').innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+          '<thead><tr style="text-align:center;color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' +
+          '<th style="padding:8px;text-align:left;">Titán</th><th style="padding:8px;">Contactados</th><th style="padding:8px;">Confirmados</th><th style="padding:8px;">Cierres VIP</th><th style="padding:8px;">Conversión</th><th style="padding:8px;">Comisión</th><th style="padding:8px;text-align:left;">Sugerencia</th>' +
+          '</tr></thead><tbody>' + tabla + '</tbody></table></div>';
+      }).catch(function(err){ $('metricas-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
+    }
+
+    window.abrirUmbrales = function(){
+      var p = $('umbrales-panel');
+      p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    };
+    window.guardarUmbrales = function(){
+      apiPost('crm_umbrales_guardar', {
+        ascenso: parseInt($('umb-ascenso').value,10),
+        descenso: parseInt($('umb-descenso').value,10),
+        min_contactados: parseInt($('umb-mincont').value,10)
+      }).then(function(res){
+        if (res.ok){ alert('Umbrales guardados'); cargarMetricas(); }
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+    window.aplicarCambioRango = function(email, nuevoRangoId, tipo){
+      if (!confirm('¿Confirmas ' + (tipo==='subir'?'el ASCENSO':'el DESCENSO') + ' de rango para este Titán?')) return;
+      apiPost('crm_aplicar_cambio_rango', { titan_email: email, nuevo_rango_id: nuevoRangoId }).then(function(res){
+        if (res.ok){ alert('Rango actualizado'); cargarMetricas(); }
         else alert('Error: ' + (res.error||''));
       });
     };
