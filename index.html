@@ -563,11 +563,13 @@
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
           <button class="app-tab" data-tab="eventos">Eventos</button>
+          <button class="app-tab" data-tab="titanes">Titanes</button>
           <button class="app-tab" data-tab="cuenta">Cuenta</button>
         </div>
         <div class="user-info">
           <div class="user-avatar" id="user-avatar">N</div>
           <span id="user-email">--</span>
+          <span id="user-rol-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(245,184,0,0.15);color:#F5B800;padding:2px 8px;border-radius:100px;text-transform:uppercase;letter-spacing:0.5px;"></span>
           <button class="btn-logout" id="btn-logout">Salir</button>
         </div>
       </div>
@@ -677,11 +679,20 @@
         </div>
       </section>
 
+      <section id="tab-titanes" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Titanes (vendedores)</h2>
+          <button onclick="nuevoTitan()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo Titán</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Gestiona tu equipo de ventas. Cada Titán puede iniciar sesión con su correo y contraseña.</p>
+        <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
       <section id="tab-cuenta" class="tab-content" style="display:none;">
         <h2 class="section-title">Mi cuenta</h2>
         <div style="max-width:520px;">
           <!-- Perfil -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
+          <div class="perfil-admin-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
             <h3 style="margin:0 0 14px;font-size:15px;">Datos del perfil</h3>
             <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre</label>
             <input id="perfil-nombre" placeholder="Nicolás Cuéllar" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;">
@@ -703,7 +714,7 @@
           </div>
 
           <!-- Estado Google OAuth -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;">
+          <div class="oauth-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;">
             <h3 style="margin:0 0 8px;font-size:15px;">Inicio de sesión con Google</h3>
             <p id="oauth-estado" style="margin:0;font-size:13px;color:#9CA3AF;">Verificando&hellip;</p>
           </div>
@@ -718,6 +729,14 @@
     <div class="modal" style="max-width:680px;">
       <button class="close" onclick="cerrarModalEvento()">&times;</button>
       <div id="modal-evento-content"></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL TITÁN ============ -->
+  <div id="modal-titan" class="modal-overlay" onclick="if(event.target===this)cerrarModalTitan()" style="display:none;">
+    <div class="modal" style="max-width:460px;">
+      <button class="close" onclick="cerrarModalTitan()">&times;</button>
+      <div id="modal-titan-content"></div>
     </div>
   </div>
 
@@ -744,11 +763,13 @@
     var STORAGE_EMAIL = 'crm_email';
     var STORAGE_NOMBRE = 'crm_nombre';
     var STORAGE_FOTO = 'crm_foto';
+    var STORAGE_ROL = 'crm_rol';
 
     var token = null;
     var userEmail = null;
     var userNombre = null;
     var userFoto = null;
+    var userRol = null;
 
     // ============ HELPERS ============
     function $(id) { return document.getElementById(id); }
@@ -849,15 +870,15 @@
           }
           token = res.token;
           userEmail = res.email;
-          userNombre = '';
-          userFoto = '';
-          if (remember) {
-            localStorage.setItem(STORAGE_KEY, token);
-            localStorage.setItem(STORAGE_EMAIL, userEmail);
-          } else {
-            sessionStorage.setItem(STORAGE_KEY, token);
-            sessionStorage.setItem(STORAGE_EMAIL, userEmail);
-          }
+          userNombre = res.nombre || '';
+          userFoto = res.foto || '';
+          userRol = res.rol || 'admin';
+          var store = remember ? localStorage : sessionStorage;
+          store.setItem(STORAGE_KEY, token);
+          store.setItem(STORAGE_EMAIL, userEmail);
+          store.setItem(STORAGE_ROL, userRol);
+          if (userNombre) store.setItem(STORAGE_NOMBRE, userNombre);
+          if (userFoto) store.setItem(STORAGE_FOTO, userFoto);
           mostrarApp();
         })
         .catch(function(err){
@@ -879,8 +900,10 @@
           userEmail = res.email;
           userNombre = res.nombre || '';
           userFoto = res.foto || '';
+          userRol = res.rol || 'admin';
           localStorage.setItem(STORAGE_KEY, token);
           localStorage.setItem(STORAGE_EMAIL, userEmail);
+          localStorage.setItem(STORAGE_ROL, userRol);
           if (userNombre) localStorage.setItem(STORAGE_NOMBRE, userNombre);
           if (userFoto) localStorage.setItem(STORAGE_FOTO, userFoto);
           mostrarApp();
@@ -926,19 +949,35 @@
       } else {
         avatar.textContent = (userEmail || 'U').charAt(0).toUpperCase();
       }
+      aplicarRol();
       // Cargar dashboard inicial
       cargarTab('dashboard');
     }
 
+    // Muestra/oculta pestañas según el rol del usuario
+    function aplicarRol() {
+      var soloAdmin = ['eventos', 'titanes', 'pagos'];  // pestañas exclusivas de admin
+      document.querySelectorAll('.app-tab').forEach(function(btn){
+        var tab = btn.dataset.tab;
+        if (soloAdmin.indexOf(tab) >= 0) {
+          btn.style.display = (userRol === 'admin') ? '' : 'none';
+        }
+      });
+      // Etiqueta de rol junto al email
+      var badge = $('user-rol-badge');
+      if (badge) {
+        badge.textContent = userRol === 'admin' ? 'Administrador' : 'Titán';
+        badge.style.display = '';
+      }
+    }
+
     function logout() {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(STORAGE_EMAIL);
-      localStorage.removeItem(STORAGE_NOMBRE);
-      localStorage.removeItem(STORAGE_FOTO);
-      sessionStorage.removeItem(STORAGE_KEY);
-      sessionStorage.removeItem(STORAGE_EMAIL);
+      [STORAGE_KEY, STORAGE_EMAIL, STORAGE_NOMBRE, STORAGE_FOTO, STORAGE_ROL].forEach(function(k){
+        localStorage.removeItem(k); sessionStorage.removeItem(k);
+      });
       token = null;
       userEmail = null;
+      userRol = null;
       location.reload();
     }
     $('btn-logout').addEventListener('click', logout);
@@ -960,6 +999,7 @@
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
       if (tab === 'eventos') cargarEventos();
+      if (tab === 'titanes') cargarTitanes();
       if (tab === 'cuenta') cargarCuenta();
     }
 
@@ -1326,7 +1366,108 @@
       if (dispHora) dispHora.value = horaTxt + tzTxt;
     };
 
+    // ============ TITANES (solo admin) ============
+    var titanesCache = [];
+    function cargarTitanes() {
+      apiGet('crm_titanes_listar').then(function(res){
+        if (!res.ok) { $('titanes-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        titanesCache = res.data || [];
+        if (titanesCache.length === 0) {
+          $('titanes-lista').innerHTML = '<div style="color:#9CA3AF;">No hay Titanes aún. Crea el primero con "+ Nuevo Titán".</div>';
+          return;
+        }
+        $('titanes-lista').innerHTML = titanesCache.map(function(t){
+          var inicial = (t.nombre || t.email || 'T').charAt(0).toUpperCase();
+          var avatar = t.foto_url
+            ? '<img src="' + escapeHtml(t.foto_url) + '" style="width:42px;height:42px;border-radius:50%;object-fit:cover;">'
+            : '<div style="width:42px;height:42px;border-radius:50%;background:rgba(245,184,0,0.2);color:#F5B800;display:flex;align-items:center;justify-content:center;font-weight:700;">' + inicial + '</div>';
+          var estado = t.activo
+            ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">ACTIVO</span>'
+            : '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">DESHABILITADO</span>';
+          var btnToggle = t.activo
+            ? '<button onclick="toggleTitan(\'' + t.titan_id + '\',false)" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Deshabilitar</button>'
+            : '<button onclick="toggleTitan(\'' + t.titan_id + '\',true)" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Habilitar</button>';
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;' + (t.activo ? '' : 'opacity:0.6;') + '">' +
+            avatar +
+            '<div style="flex:1;min-width:0;"><div style="font-weight:700;">' + escapeHtml(t.nombre) + ' ' + estado + '</div>' +
+            '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(t.email) + '</div></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<button onclick="editarTitan(\'' + t.titan_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Editar</button>' +
+              btnToggle +
+            '</div>' +
+          '</div>';
+        }).join('');
+      });
+    }
+
+    window.nuevoTitan = function(){ abrirModalTitan(null); };
+    window.editarTitan = function(id){
+      abrirModalTitan(titanesCache.filter(function(t){return t.titan_id===id;})[0]);
+    };
+
+    function abrirModalTitan(t){
+      var nuevo = !t;
+      t = t || { nombre:'', email:'', activo:true, foto_url:'' };
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;';
+      var html =
+        '<h2 style="margin:0 0 16px;font-size:20px;">' + (nuevo ? 'Nuevo Titán' : 'Editar Titán') + '</h2>' +
+        '<input type="hidden" id="t-id" value="' + escapeHtml(t.titan_id||'') + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre *</label>' +
+        '<input id="t-nombre" value="' + escapeHtml(t.nombre) + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo *</label>' +
+        '<input id="t-email" type="email" value="' + escapeHtml(t.email) + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">' + (nuevo ? 'Contraseña * (mín. 8)' : 'Nueva contraseña (dejar vacío para no cambiar)') + '</label>' +
+        '<input id="t-password" type="password" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Foto (URL, opcional)</label>' +
+        '<input id="t-foto" value="' + escapeHtml(t.foto_url||'') + '" placeholder="https://..." style="' + inp + '">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">' +
+          '<input type="checkbox" id="t-activo" ' + (t.activo ? 'checked':'') + '> Cuenta activa (puede iniciar sesión)</label>' +
+        '<div style="display:flex;gap:10px;">' +
+          '<button onclick="guardarTitan()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar</button>' +
+          '<button onclick="cerrarModalTitan()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+      $('modal-titan-content').innerHTML = html;
+      $('modal-titan').style.display = 'flex';
+    }
+
+    window.cerrarModalTitan = function(){ $('modal-titan').style.display = 'none'; };
+
+    window.guardarTitan = function(){
+      var titan = {
+        titan_id: $('t-id').value || null,
+        nombre: $('t-nombre').value.trim(),
+        email: $('t-email').value.trim(),
+        password: $('t-password').value,
+        foto_url: $('t-foto').value.trim(),
+        activo: $('t-activo').checked
+      };
+      if (!titan.nombre || !titan.email) { alert('Nombre y correo son obligatorios'); return; }
+      apiPost('crm_titan_guardar', { titan: titan }).then(function(res){
+        if (res.ok) { cerrarModalTitan(); cargarTitanes(); }
+        else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    window.toggleTitan = function(id, activar){
+      var accion = activar ? 'habilitar' : 'deshabilitar';
+      if (!confirm('¿Seguro que quieres ' + accion + ' este Titán?')) return;
+      apiPost('crm_titan_toggle', { titan_id: id, activar: activar }).then(function(res){
+        if (res.ok) cargarTitanes();
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
     function cargarCuenta() {
+      // Los Titanes no ven el perfil de admin ni el OAuth: solo cambian su contraseña
+      var perfilCard = document.querySelector('#tab-cuenta .perfil-admin-card');
+      var oauthCard = document.querySelector('#tab-cuenta .oauth-card');
+      if (userRol === 'titan') {
+        if (perfilCard) perfilCard.style.display = 'none';
+        if (oauthCard) oauthCard.style.display = 'none';
+        return;  // no llamamos crm_perfil_obtener (es de admin)
+      }
+      if (perfilCard) perfilCard.style.display = '';
+      if (oauthCard) oauthCard.style.display = '';
       apiGet('crm_perfil_obtener').then(function(res){
         if (!res.ok) return;
         var d = res.data;
@@ -1359,7 +1500,9 @@
       var nueva = $('pass-nueva').value;
       if (nueva.length < 8) { $('pass-msg').textContent='Mín. 8 caracteres'; $('pass-msg').style.color='#f87171'; return; }
       $('pass-msg').textContent = 'Cambiando…';
-      apiPost('crm_cambiar_password', { password_vieja: vieja, password_nueva: nueva }).then(function(res){
+      // Admin y Titán usan endpoints distintos
+      var endpoint = (userRol === 'titan') ? 'crm_titan_cambiar_password' : 'crm_cambiar_password';
+      apiPost(endpoint, { password_vieja: vieja, password_nueva: nueva }).then(function(res){
         $('pass-msg').textContent = res.ok ? '✓ Contraseña cambiada' : ('Error: ' + (res.error||''));
         $('pass-msg').style.color = res.ok ? '#34d399' : '#f87171';
         if (res.ok) { $('pass-vieja').value=''; $('pass-nueva').value=''; }
@@ -1428,11 +1571,13 @@
       userEmail = localStorage.getItem(STORAGE_EMAIL) || sessionStorage.getItem(STORAGE_EMAIL);
       userNombre = localStorage.getItem(STORAGE_NOMBRE) || '';
       userFoto = localStorage.getItem(STORAGE_FOTO) || '';
+      userRol = localStorage.getItem(STORAGE_ROL) || sessionStorage.getItem(STORAGE_ROL) || 'admin';
 
       if (token && userEmail) {
-        // Verificar que el token sigue válido haciendo un request liviano
-        apiGet('crm_stats').then(function(res){
+        // Verificar token y refrescar el rol desde el backend
+        apiGet('crm_sesion_actual').then(function(res){
           if (res && res.ok) {
+            userRol = res.rol || userRol;
             mostrarApp();
           } else {
             logout();
