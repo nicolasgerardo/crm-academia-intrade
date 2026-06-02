@@ -1,356 +1,1723 @@
-// ============================================================
-// Leads.gs - Motor de gestión de leads para Titanes
-// ============================================================
-// Modelo:
-//  - Cada lead tiene un estado POR CAMPAÑA (no global).
-//  - Los Titanes ven hasta 5 leads asignados a la vez.
-//  - Al cambiar el estado de un lead (sacarlo de "No contactado"),
-//    se libera cupo y el sistema autoasigna otro del pool.
-//  - LockService evita que dos Titanes tomen el mismo lead.
-//
-// Hoja 'leads_estados':
-//   lead_email | campania_id | estado | titan_asignado | tipo |
-//   acompanante_de | fecha_asignacion | fecha_ultimo_cambio | notas |
-//   registrado_por
-//
-//  tipo: 'principal' | 'acompanante'
-//  registrado_por: email de quien creó/registró el lead (para métricas)
-// ============================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM Academia Intrade · v2</title>
+  <link rel="icon" type="image/png" href="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120">
 
-var LEAD_MAX_ASIGNADOS = 5;  // tope de leads activos por Titán
-var LEAD_MAX_INTENTOS = 3;   // intentos sin respuesta antes de liberar al pool (configurable en Properties)
+  <!-- Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-// Lee el máximo de intentos (configurable desde el CRM vía Properties)
-function leadMaxIntentos() {
-  var v = PropertiesService.getScriptProperties().getProperty('LEAD_MAX_INTENTOS');
-  return v ? parseInt(v, 10) : LEAD_MAX_INTENTOS;
-}
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
-// Los 12 estados del lead (clave interna : etiqueta visible)
-var LEAD_ESTADOS = [
-  { val: 'no_contactado',      label: 'No contactado (virgen)' },
-  { val: 'no_respondio',       label: 'No respondió' },
-  { val: 'confirmado',         label: 'Confirmado' },
-  { val: 'acompanante',        label: 'Acompañante' },
-  { val: 'pendiente_confirmar',label: 'Pendiente por confirmar' },
-  { val: 'whatsapp_enviado',   label: 'WhatsApp enviado' },
-  { val: 'confirmado_whatsapp',label: 'Confirmado WhatsApp' },
-  { val: 'vip_llamada',        label: 'VIP llamada' },
-  { val: 'pendiente_vip',      label: 'Pendiente VIP' },
-  { val: 'duplicado',          label: 'Duplicado' },
-  { val: 'erroneo',            label: 'Erróneo' },
-  { val: 'vip_adicional',      label: 'VIP adicional' }
-];
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100vh; }
+    /* Fix global: selects y sus opciones con fondo oscuro y texto claro
+       (evita el problema de texto blanco sobre fondo blanco en los desplegables) */
+    select {
+      background-color: #14102b;
+      color: #ffffff;
+      color-scheme: dark;
+    }
+    select option {
+      background-color: #14102b;
+      color: #ffffff;
+    }
+    input[type="datetime-local"], input[type="date"], input[type="time"] {
+      color-scheme: dark;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #050010;
+      color: #fff;
+      line-height: 1.5;
+      background: radial-gradient(ellipse at top, #1A1F3D 0%, #050010 70%);
+    }
 
-// Estados que cuentan como "ya trabajado" (liberan cupo de los 5)
-var LEAD_ESTADOS_CERRADOS = ['confirmado','confirmado_whatsapp','vip_llamada','duplicado','erroneo','vip_adicional','acompanante'];
+    /* ============ LOGIN ============ */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(245, 184, 0, 0.2);
+      border-radius: 20px;
+      padding: 40px 32px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .login-logo img { width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 4px 12px rgba(245,184,0,0.3); }
+    .login-logo .text { display: flex; flex-direction: column; line-height: 1.1; }
+    .login-logo small {
+      font-size: 10px; letter-spacing: 2.5px; color: #FFC832; font-weight: 700;
+      text-transform: uppercase;
+    }
+    .login-logo .name { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; letter-spacing: 1.5px; }
+    .login-card h1 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .login-card .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 28px;
+    }
+    .login-form label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .login-form input {
+      width: 100%;
+      padding: 13px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 15px;
+      font-family: inherit;
+      margin-bottom: 14px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .login-form input:focus { outline: none; border-color: #F5B800; background: rgba(245,184,0,0.04); }
+    .login-form .remember {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: rgba(255,255,255,0.7);
+      margin-bottom: 18px; cursor: pointer;
+      user-select: none;
+    }
+    .login-form .remember input { width: auto; margin: 0; }
+    .btn-primary {
+      width: 100%;
+      padding: 14px 18px;
+      background: #F5B800;
+      color: #0B1131;
+      border: none;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      font-family: inherit;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(245,184,0,0.3); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 22px 0;
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+      letter-spacing: 1.5px;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: rgba(255,255,255,0.1);
+    }
+    .google-btn-container { display: flex; justify-content: center; }
+    .login-error {
+      background: rgba(255,107,107,0.08);
+      border: 1px solid rgba(255,107,107,0.3);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #FF6B6B;
+      font-size: 13.5px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .login-error.show { display: block; }
 
-function getHojaLeadsEstados() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('leads_estados');
-  if (!sheet) {
-    sheet = ss.insertSheet('leads_estados');
-    sheet.appendRow(['lead_email','campania_id','estado','titan_asignado','tipo','acompanante_de','fecha_asignacion','fecha_ultimo_cambio','notas','registrado_por','intentos']);
-    sheet.setFrozenRows(1);
-  }
-  return sheet;
-}
+    /* ============ APP (post-login) ============ */
+    .app { display: none; min-height: 100vh; }
+    .app.show { display: block; }
 
-// ============================================================
-// Devuelve la lista de estados (para poblar el frontend)
-// ============================================================
-function crmLeadsEstados() {
-  return { ok: true, data: LEAD_ESTADOS };
-}
+    .app-nav {
+      background: rgba(11, 17, 49, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(245,184,0,0.15);
+      padding: 12px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .app-nav-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .app-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+    }
+    .app-logo img { width: 32px; height: 32px; border-radius: 7px; box-shadow: 0 2px 8px rgba(245,184,0,0.3); }
+    .app-logo .accent { color: #F5B800; }
+    .app-tabs {
+      display: flex; gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .app-tabs::-webkit-scrollbar { display: none; }
+    .app-tab {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: all 0.18s;
+    }
+    .app-tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .app-tab.active { color: #F5B800; background: rgba(245,184,0,0.1); border-color: rgba(245,184,0,0.3); }
+    .user-info {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+    }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #F5B800, #D49A00);
+      display: flex; align-items: center; justify-content: center;
+      color: #0B1131; font-weight: 900; font-size: 13px;
+    }
+    .user-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .btn-logout {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.7);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.18s;
+    }
+    .btn-logout:hover { color: #fff; border-color: #FF6B6B; }
 
-// ============================================================
-// MIS LEADS: los 5 (o menos) asignados a un Titán en una campaña.
-// Si tiene menos de 5 activos, autoasigna del pool hasta completar.
-// ============================================================
-function crmMisLeads(email, campaniaId) {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);  // espera hasta 10s por el lock (anti-robo)
+    .app-main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 20px;
+    }
 
-    campaniaId = campaniaId || obtenerCampaniaActivaId();
-    var sheet = getHojaLeadsEstados();
-    var data = sheet.getDataRange().getValues();
-    var h = data[0];
-    var idx = mapHeaders(h);
+    /* ============ DASHBOARD STATS ============ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 18px 20px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .stat-card:hover { border-color: rgba(245,184,0,0.3); }
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-card .value {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 32px;
+      font-weight: 900;
+      line-height: 1;
+      color: #fff;
+    }
+    .stat-card .value.gold { color: #F5B800; }
+    .stat-card .extra {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 6px;
+    }
 
-    // Índice de la maestra UNA sola vez (evita leer 900 filas por cada lead)
-    var indiceMaestra = construirIndiceMaestra();
+    .section-title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .badge {
+      background: rgba(245,184,0,0.15);
+      color: #FFC832;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+    }
 
-    // 1. Contar leads activos (no cerrados) ya asignados a este Titán en esta campaña
-    var misActivos = [];
-    for (var i = 1; i < data.length; i++) {
-      if (String(data[i][idx.titan_asignado]).toLowerCase() === email.toLowerCase() &&
-          data[i][idx.campania_id] === campaniaId) {
-        var est = data[i][idx.estado];
-        if (LEAD_ESTADOS_CERRADOS.indexOf(est) < 0) {
-          misActivos.push(filaALead(data[i], idx, i + 1, indiceMaestra));
+    /* ============ TABLAS ============ */
+    .table-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .table-controls input,
+    .table-controls select {
+      padding: 9px 13px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .table-controls input { flex: 1; min-width: 200px; }
+    .table-controls input:focus,
+    .table-controls select:focus { outline: none; border-color: #F5B800; }
+
+    .table-wrap {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      overflow: hidden;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead {
+      background: rgba(11,17,49,0.5);
+    }
+    th {
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #FFC832;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(245,184,0,0.15);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.85);
+      vertical-align: middle;
+    }
+    tr:hover td { background: rgba(245,184,0,0.04); }
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .pill.green { background: rgba(0,200,150,0.15); color: #00C896; }
+    .pill.red { background: rgba(255,107,107,0.15); color: #FF6B6B; }
+    .pill.yellow { background: rgba(245,184,0,0.15); color: #FFC832; }
+    .pill.gray { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+    .pill.blue { background: rgba(70,130,200,0.15); color: #6FA8E0; }
+
+    .pill-flag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+    }
+    .pill-flag img {
+      width: 16px; height: 12px; border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+    }
+
+    .table-loading,
+    .table-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: rgba(255,255,255,0.5);
+      font-size: 14px;
+    }
+
+    /* ============ EVENTOS ============ */
+    .eventos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .evento-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .evento-card .grupo {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(245,184,0,0.15);
+      color: #FFC832;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .evento-card .fecha {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .evento-card .hora {
+      color: #F5B800;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+    .evento-card .descripcion {
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .evento-card .stats-evento {
+      display: flex; gap: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .evento-card .stat-mini {
+      flex: 1;
+    }
+    .evento-card .stat-mini .num {
+      font-size: 24px;
+      font-weight: 900;
+      color: #fff;
+      font-family: 'Montserrat', sans-serif;
+    }
+    .evento-card .stat-mini .lbl {
+      font-size: 10px;
+      letter-spacing: 1.2px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    /* ============ MODAL DETALLE ============ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 0, 16, 0.85);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #0B1131;
+      border: 1px solid rgba(245,184,0,0.25);
+      border-radius: 16px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      position: relative;
+    }
+    .modal .close {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.6);
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .modal .close:hover { color: #fff; border-color: #FF6B6B; }
+    .detail-section {
+      margin-bottom: 18px;
+    }
+    .detail-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #FFC832;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px 18px;
+    }
+    .detail-grid .item .lbl {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .detail-grid .item .val {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    /* ============ MOBILE ============ */
+    @media (max-width: 768px) {
+      .app-nav-inner { flex-wrap: wrap; gap: 10px; }
+      .app-tabs { order: 3; width: 100%; }
+      .app-main { padding: 18px 14px; }
+      .stat-card .value { font-size: 24px; }
+      .stat-card { padding: 14px 16px; }
+      th, td { padding: 9px 10px; font-size: 12px; }
+      .modal { padding: 22px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen" class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120" alt="Money Magnet">
+        <div class="text">
+          <small>ACADEMIA INTRADE</small>
+          <span class="name">CRM <span style="color:#F5B800;">PANEL</span></span>
+        </div>
+      </div>
+      <h1>Iniciar sesi&oacute;n</h1>
+      <p class="subtitle">Accede al panel de administraci&oacute;n.</p>
+
+      <div id="login-error" class="login-error"></div>
+
+      <form class="login-form" id="form-login">
+        <label>Email</label>
+        <input type="email" id="login-email" required autocomplete="email" placeholder="tu@email.com">
+        <label>Contrase&ntilde;a</label>
+        <input type="password" id="login-password" required autocomplete="current-password" placeholder="Contrase&ntilde;a">
+        <label class="remember">
+          <input type="checkbox" id="login-remember" checked>
+          Recu&eacute;rdame en este computador
+        </label>
+        <button type="submit" class="btn-primary" id="btn-login-pwd">Entrar</button>
+      </form>
+
+      <div class="divider">O</div>
+
+      <div class="google-btn-container">
+        <div id="google-signin-btn"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ APP (post-login) ============ -->
+  <div id="app" class="app">
+    <nav class="app-nav">
+      <div class="app-nav-inner">
+        <div class="app-logo">
+          <img src="https://drive.google.com/thumbnail?id=1aaAXVGDHYHEXr3uQC1k5f9WBqPnSeFt4&sz=w120" alt="MM">
+          <span>CRM <span class="accent">INTRADE</span></span>
+        </div>
+        <div class="app-tabs">
+          <button class="app-tab active" data-tab="dashboard">Dashboard</button>
+          <button class="app-tab" data-tab="misleads">Mis Leads</button>
+          <button class="app-tab" data-tab="contactos">Contactos</button>
+          <button class="app-tab" data-tab="pagos">Pagos VIP</button>
+          <button class="app-tab" data-tab="eventos">Eventos</button>
+          <button class="app-tab" data-tab="titanes">Titanes</button>
+          <button class="app-tab" data-tab="cuenta">Cuenta</button>
+        </div>
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">N</div>
+          <span id="user-email">--</span>
+          <span id="user-rol-badge" style="display:none;font-size:10px;font-weight:700;background:rgba(245,184,0,0.15);color:#F5B800;padding:2px 8px;border-radius:100px;text-transform:uppercase;letter-spacing:0.5px;"></span>
+          <button class="btn-logout" id="btn-logout">Salir</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="app-main">
+
+      <!-- DASHBOARD -->
+      <section id="tab-dashboard" class="tab-content">
+        <h2 class="section-title">Resumen</h2>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="label">Cargando&hellip;</div></div>
+        </div>
+      </section>
+
+      <!-- MIS LEADS -->
+      <section id="tab-misleads" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Mis Leads <span class="badge" id="misleads-count">0</span></h2>
+          <button onclick="cargarMisLeads()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-refresh"></i> Actualizar</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Trabaja tus leads asignados. Al cerrar un lead, el sistema te asigna otro automáticamente (máximo 5 a la vez).</p>
+        <div id="misleads-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
+      <!-- CONTACTOS -->
+      <section id="tab-contactos" class="tab-content" style="display:none;">
+        <h2 class="section-title">Contactos <span class="badge" id="contactos-count">0</span></h2>
+        <div class="table-controls">
+          <input type="text" id="filtro-busqueda" placeholder="Buscar por nombre, email, tel&eacute;fono, ticket o pa&iacute;s&hellip;">
+          <select id="filtro-origen">
+            <option value="">Todos los contactos</option>
+            <option value="money_magnet" selected>Solo Money Magnet 2026</option>
+            <option value="historico">Solo hist&oacute;rico</option>
+          </select>
+          <select id="filtro-grupo">
+            <option value="">Todos los grupos</option>
+            <option value="latam_bajo">Latam Bajo</option>
+            <option value="latam_alto">Latam Alto</option>
+            <option value="europa">Europa</option>
+          </select>
+          <select id="filtro-vip">
+            <option value="">Todos</option>
+            <option value="si">Solo VIP</option>
+            <option value="no">No VIP</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tabla-contactos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Tel&eacute;fono</th>
+                <th>Pa&iacute;s</th>
+                <th>Origen</th>
+                <th>Grupo</th>
+                <th>VIP</th>
+                <th>Ticket</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-contactos">
+              <tr><td colspan="9" class="table-loading">Cargando contactos&hellip;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PAGOS -->
+      <section id="tab-pagos" class="tab-content" style="display:none;">
+        <h2 class="section-title">Pagos VIP <span class="badge" id="pagos-count">0</span></h2>
+        <div class="table-controls">
+          <select id="filtro-estado">
+            <option value="">Todos los estados</option>
+            <option value="APROBADO">Aprobados</option>
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="DECLINADO">Declinados</option>
+            <option value="EXPIRADO">Expirados</option>
+          </select>
+          <select id="filtro-modo">
+            <option value="">Todos</option>
+            <option value="production">Producci&oacute;n</option>
+            <option value="sandbox">Sandbox</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="tabla-pagos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Email</th>
+                <th>Plan</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>M&eacute;todo</th>
+                <th>Modo</th>
+                <th>Referencia</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pagos">
+              <tr><td colspan="8" class="table-loading">Cargando pagos&hellip;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- EVENTOS -->
+      <section id="tab-eventos" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Gestor de Eventos</h2>
+          <button class="btn-primario" onclick="nuevoEvento()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo evento</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Controla fechas, links de Teams y precios por sector. Al guardar, los links se sincronizan con los recordatorios automáticos.</p>
+        <div id="eventos-lista">
+          <div style="color:#9CA3AF;">Cargando&hellip;</div>
+        </div>
+      </section>
+
+      <section id="tab-titanes" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Titanes (vendedores)</h2>
+          <button onclick="nuevoTitan()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo Titán</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Gestiona tu equipo de ventas. Cada Titán puede iniciar sesión con su correo y contraseña.</p>
+        <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
+      <section id="tab-cuenta" class="tab-content" style="display:none;">
+        <h2 class="section-title">Mi cuenta</h2>
+        <div style="max-width:520px;">
+          <!-- Perfil -->
+          <div class="perfil-admin-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
+            <h3 style="margin:0 0 14px;font-size:15px;">Datos del perfil</h3>
+            <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre</label>
+            <input id="perfil-nombre" placeholder="Nicolás Cuéllar" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;">
+            <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo de recuperación</label>
+            <input id="perfil-email-rec" type="email" placeholder="tucorreo@ejemplo.com" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:14px;box-sizing:border-box;">
+            <button onclick="guardarPerfil()" style="background:#F5B800;color:#0B1131;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar perfil</button>
+            <span id="perfil-msg" style="margin-left:12px;font-size:13px;"></span>
+          </div>
+
+          <!-- Cambiar contraseña -->
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
+            <h3 style="margin:0 0 14px;font-size:15px;">Cambiar contraseña</h3>
+            <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Contraseña actual</label>
+            <input id="pass-vieja" type="password" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;">
+            <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nueva contraseña (mín. 8 caracteres)</label>
+            <input id="pass-nueva" type="password" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:14px;box-sizing:border-box;">
+            <button onclick="cambiarPassword()" style="background:#F5B800;color:#0B1131;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer;">Cambiar contraseña</button>
+            <span id="pass-msg" style="margin-left:12px;font-size:13px;"></span>
+          </div>
+
+          <!-- Estado Google OAuth -->
+          <div class="oauth-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;">
+            <h3 style="margin:0 0 8px;font-size:15px;">Inicio de sesión con Google</h3>
+            <p id="oauth-estado" style="margin:0;font-size:13px;color:#9CA3AF;">Verificando&hellip;</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ MODAL EVENTO ============ -->
+  <div id="modal-evento" class="modal-overlay" onclick="if(event.target===this)cerrarModalEvento()" style="display:none;">
+    <div class="modal" style="max-width:680px;">
+      <button class="close" onclick="cerrarModalEvento()">&times;</button>
+      <div id="modal-evento-content"></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL TITÁN ============ -->
+  <div id="modal-titan" class="modal-overlay" onclick="if(event.target===this)cerrarModalTitan()" style="display:none;">
+    <div class="modal" style="max-width:460px;">
+      <button class="close" onclick="cerrarModalTitan()">&times;</button>
+      <div id="modal-titan-content"></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL DETALLE ============ -->
+  <div id="modal-detalle" class="modal-overlay" onclick="if(event.target===this)cerrarModal()">
+    <div class="modal">
+      <button class="close" onclick="cerrarModal()">&times;</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // ============ CONFIG ============
+    var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK6XSxi1T4I2hCSZeEScJy7pKhFGs2S1OVtxSmAfc2oFjK1UonFmIGFjGEmJAdTymQ8g/exec';
+
+    // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
+    // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
+    var GOOGLE_CLIENT_ID = '1017716219810-5bu75fnjf54m0o6euauhgdl2rorb12oo.apps.googleusercontent.com';
+
+    var STORAGE_KEY = 'crm_token';
+    var STORAGE_EMAIL = 'crm_email';
+    var STORAGE_NOMBRE = 'crm_nombre';
+    var STORAGE_FOTO = 'crm_foto';
+    var STORAGE_ROL = 'crm_rol';
+
+    var token = null;
+    var userEmail = null;
+    var userNombre = null;
+    var userFoto = null;
+    var userRol = null;
+
+    // ============ HELPERS ============
+    function $(id) { return document.getElementById(id); }
+    function show(el) { el.style.display = ''; el.classList.add('show'); }
+    function hide(el) { el.style.display = 'none'; el.classList.remove('show'); }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function formatFecha(iso) {
+      if (!iso) return '-';
+      try {
+        var d = new Date(iso);
+        return d.toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'numeric'}) +
+               ' ' + d.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
+      } catch(e) { return String(iso); }
+    }
+
+    function formatPlan(p) {
+      if (p === 'vip_1') return 'VIP 1 Persona';
+      if (p === 'vip_2') return 'VIP 2 Personas';
+      return p || '-';
+    }
+
+    function pillEstado(estado) {
+      if (estado === 'APROBADO') return '<span class="pill green">Aprobado</span>';
+      if (estado === 'PENDIENTE') return '<span class="pill yellow">Pendiente</span>';
+      if (estado === 'DECLINADO') return '<span class="pill red">Declinado</span>';
+      if (estado === 'EXPIRADO') return '<span class="pill red">Expirado</span>';
+      return '<span class="pill gray">' + escapeHtml(estado) + '</span>';
+    }
+
+    // ============ API ============
+    function apiGet(action, params) {
+      var qs = ['action=' + encodeURIComponent(action), 'token=' + encodeURIComponent(token || '')];
+      Object.keys(params || {}).forEach(function(k){
+        if (params[k] !== undefined && params[k] !== null && params[k] !== '') {
+          qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
         }
-      }
-    }
-
-    // 2. Si tiene menos de 5 activos, autoasignar del pool
-    var faltan = LEAD_MAX_ASIGNADOS - misActivos.length;
-    if (faltan > 0) {
-      var nuevos = autoasignarLeads(sheet, data, idx, email, campaniaId, faltan, indiceMaestra);
-      misActivos = misActivos.concat(nuevos);
-    }
-
-    return { ok: true, data: misActivos, campania_id: campaniaId, max: LEAD_MAX_ASIGNADOS };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  } finally {
-    try { lock.releaseLock(); } catch (e) {}
-  }
-}
-
-// Autoasigna leads al Titán: primero los liberados (en el pool, sin titán),
-// luego contactos nuevos de la campaña. Reparto aleatorio (baraja).
-function autoasignarLeads(sheetEstados, dataEstados, idx, email, campaniaId, cantidad, indiceMaestra) {
-  indiceMaestra = indiceMaestra || construirIndiceMaestra();
-  var nuevosLeads = [];
-
-  // --- PASO 1: tomar leads LIBERADOS (registro existente, misma campaña, sin titán, virgen) ---
-  var liberadosFilas = [];
-  for (var i = 1; i < dataEstados.length; i++) {
-    if (dataEstados[i][idx.campania_id] === campaniaId &&
-        !String(dataEstados[i][idx.titan_asignado] || '').trim() &&
-        dataEstados[i][idx.estado] === 'no_contactado') {
-      liberadosFilas.push(i + 1);
-    }
-  }
-  // Barajar aleatoriamente los liberados
-  liberadosFilas = barajar(liberadosFilas);
-  for (var L = 0; L < liberadosFilas.length && nuevosLeads.length < cantidad; L++) {
-    var fila = liberadosFilas[L];
-    sheetEstados.getRange(fila, idx.titan_asignado + 1).setValue(email);
-    sheetEstados.getRange(fila, idx.fecha_asignacion + 1).setValue(new Date());
-    // Usar la fila ya cargada en memoria (no releer)
-    var rowVals = dataEstados[fila - 1].slice();
-    rowVals[idx.titan_asignado] = email;
-    nuevosLeads.push(filaALead(rowVals, idx, fila, indiceMaestra));
-  }
-
-  // --- PASO 2: si aún faltan, asignar contactos nuevos del pool de la maestra ---
-  var faltan = cantidad - nuevosLeads.length;
-  if (faltan <= 0) return nuevosLeads;
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var maestra = ss.getSheetByName('contactos_maestra');
-  if (!maestra) return nuevosLeads;
-  var mData = maestra.getDataRange().getValues();
-  var mh = mData[0];
-  var mIdxEmail = mh.indexOf('email');
-  var mIdxNombre = mh.indexOf('nombre');
-  var mIdxApellido = mh.indexOf('apellido');
-  var mIdxTel = mh.indexOf('telefono');
-  var mIdxWa = mh.indexOf('whatsapp');
-  var mIdxGrupo = mh.indexOf('grupo_evento');
-  var mIdxFuente = mh.indexOf('fuente_primaria');
-  var mIdxEtq = mh.indexOf('etiquetas');
-
-  // Emails que YA tienen registro en esta campaña (no duplicar)
-  var yaEnCampania = {};
-  for (var e = 1; e < dataEstados.length; e++) {
-    if (dataEstados[e][idx.campania_id] === campaniaId) {
-      yaEnCampania[String(dataEstados[e][idx.lead_email]).toLowerCase()] = true;
-    }
-  }
-
-  // Recolectar candidatos del pool (Money Magnet, sin registro en campaña)
-  var candidatos = [];
-  for (var j = 1; j < mData.length; j++) {
-    var em = String(mData[j][mIdxEmail] || '').trim().toLowerCase();
-    if (!em || em.indexOf('@') < 0) continue;
-    if (yaEnCampania[em]) continue;
-    var fuente = String(mData[j][mIdxFuente] || '').toLowerCase();
-    var etq = String(mData[j][mIdxEtq] || '').toLowerCase();
-    var esMM = fuente.indexOf('money_magnet') >= 0 || fuente.indexOf('landing') >= 0 || etq.indexOf('money_magnet') >= 0;
-    if (!esMM) continue;
-    candidatos.push(j);
-  }
-  // Barajar candidatos (reparto aleatorio)
-  candidatos = barajar(candidatos);
-
-  var nuevasFilas = [];
-  for (var c = 0; c < candidatos.length && nuevasFilas.length < faltan; c++) {
-    var jj = candidatos[c];
-    var em2 = String(mData[jj][mIdxEmail]).trim().toLowerCase();
-    var ahora = new Date();
-    nuevasFilas.push([em2, campaniaId, 'no_contactado', email, 'principal', '', ahora, ahora, '', '', 0]);
-    nuevosLeads.push({
-      lead_email: em2,
-      nombre: mIdxNombre >= 0 ? (mData[jj][mIdxNombre] || '') : '',
-      apellido: mIdxApellido >= 0 ? (mData[jj][mIdxApellido] || '') : '',
-      telefono: mIdxTel >= 0 ? (mData[jj][mIdxTel] || '') : '',
-      whatsapp: mIdxWa >= 0 ? (mData[jj][mIdxWa] || '') : '',
-      grupo: mIdxGrupo >= 0 ? (mData[jj][mIdxGrupo] || '') : '',
-      estado: 'no_contactado', tipo: 'principal', acompanante_de: '',
-      intentos: 0, campania_id: campaniaId
-    });
-  }
-  if (nuevasFilas.length > 0) {
-    sheetEstados.getRange(sheetEstados.getLastRow() + 1, 1, nuevasFilas.length, nuevasFilas[0].length).setValues(nuevasFilas);
-  }
-  return nuevosLeads;
-}
-
-// Baraja un array (Fisher-Yates) para reparto aleatorio
-function barajar(arr) {
-  for (var i = arr.length - 1; i > 0; i--) {
-    var k = Math.floor(Math.random() * (i + 1));
-    var tmp = arr[i]; arr[i] = arr[k]; arr[k] = tmp;
-  }
-  return arr;
-}
-
-// ============================================================
-// CAMBIAR ESTADO de un lead (libera cupo si pasa a cerrado)
-// ============================================================
-function crmCambiarEstadoLead(email, campaniaId, leadEmail, nuevoEstado, opts) {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-    opts = opts || {};
-    campaniaId = campaniaId || obtenerCampaniaActivaId();
-
-    var sheet = getHojaLeadsEstados();
-    var data = sheet.getDataRange().getValues();
-    var h = data[0];
-    var idx = mapHeaders(h);
-
-    for (var i = 1; i < data.length; i++) {
-      if (String(data[i][idx.lead_email]).toLowerCase() === String(leadEmail).toLowerCase() &&
-          data[i][idx.campania_id] === campaniaId) {
-        // Verificar que el lead sea de este Titán (o admin)
-        var esAdmin = rolDeEmail(email) === 'admin';
-        if (!esAdmin && String(data[i][idx.titan_asignado]).toLowerCase() !== email.toLowerCase()) {
-          return { ok: false, error: 'Este lead no está asignado a ti' };
-        }
-
-        sheet.getRange(i + 1, idx.fecha_ultimo_cambio + 1).setValue(new Date());
-        if (opts.notas != null) sheet.getRange(i + 1, idx.notas + 1).setValue(opts.notas);
-
-        // Estado "no respondió": incrementar contador de intentos
-        if (nuevoEstado === 'no_respondio') {
-          var intentosActuales = Number(data[i][idx.intentos] || 0) + 1;
-          var maxIntentos = leadMaxIntentos();
-          if (intentosActuales >= maxIntentos) {
-            // Liberar al pool: quitar asignación y volver a virgen para que otro lo tome
-            sheet.getRange(i + 1, idx.estado + 1).setValue('no_contactado');
-            sheet.getRange(i + 1, idx.titan_asignado + 1).setValue('');
-            sheet.getRange(i + 1, idx.intentos + 1).setValue(0);
-            sheet.getRange(i + 1, idx.notas + 1).setValue(
-              (opts.notas ? opts.notas + ' | ' : '') + 'Liberado al pool tras ' + maxIntentos + ' intentos'
-            );
-            return { ok: true, liberado: true, mensaje: 'Lead liberado al pool tras ' + maxIntentos + ' intentos sin respuesta' };
-          } else {
-            sheet.getRange(i + 1, idx.estado + 1).setValue('no_respondio');
-            sheet.getRange(i + 1, idx.intentos + 1).setValue(intentosActuales);
-            return { ok: true, intentos: intentosActuales, restantes: maxIntentos - intentosActuales };
+      });
+      return fetch(APPS_SCRIPT_URL + '?' + qs.join('&'))
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if (res && res.code === 'AUTH_REQUIRED') {
+            logout();
+            throw new Error('Sesión expirada');
           }
-        }
+          return res;
+        });
+    }
 
-        sheet.getRange(i + 1, idx.estado + 1).setValue(nuevoEstado);
-        if (nuevoEstado === 'acompanante') {
-          sheet.getRange(i + 1, idx.tipo + 1).setValue('acompanante');
-          if (opts.acompanante_de) sheet.getRange(i + 1, idx.acompanante_de + 1).setValue(opts.acompanante_de);
+    function apiPost(action, body) {
+      var datos = Object.assign({ action: action, token: token }, body || {});
+      return fetch(APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(datos),
+        redirect: 'follow'
+      })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if (res && res.code === 'AUTH_REQUIRED') {
+            logout();
+            throw new Error('Sesión expirada');
+          }
+          return res;
+        });
+    }
+
+    // ============ LOGIN ============
+    function mostrarErrorLogin(msg) {
+      var el = $('login-error');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function(){ el.classList.remove('show'); }, 5000);
+    }
+
+    $('form-login').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var email = $('login-email').value.trim();
+      var password = $('login-password').value;
+      var remember = $('login-remember').checked;
+      var btn = $('btn-login-pwd');
+
+      btn.disabled = true;
+      btn.textContent = 'Entrando…';
+
+      apiPost('crm_login_password', { email: email, password: password })
+        .then(function(res){
+          if (!res.ok) {
+            mostrarErrorLogin(res.error || 'Error al iniciar sesión');
+            btn.disabled = false;
+            btn.textContent = 'Entrar';
+            return;
+          }
+          token = res.token;
+          userEmail = res.email;
+          userNombre = res.nombre || '';
+          userFoto = res.foto || '';
+          userRol = res.rol || 'admin';
+          var store = remember ? localStorage : sessionStorage;
+          store.setItem(STORAGE_KEY, token);
+          store.setItem(STORAGE_EMAIL, userEmail);
+          store.setItem(STORAGE_ROL, userRol);
+          if (userNombre) store.setItem(STORAGE_NOMBRE, userNombre);
+          if (userFoto) store.setItem(STORAGE_FOTO, userFoto);
+          mostrarApp();
+        })
+        .catch(function(err){
+          mostrarErrorLogin('Error de conexión');
+          btn.disabled = false;
+          btn.textContent = 'Entrar';
+        });
+    });
+
+    // ============ GOOGLE SIGN-IN ============
+    window.handleGoogleSignIn = function(response) {
+      apiPost('crm_login_google', { id_token: response.credential })
+        .then(function(res){
+          if (!res.ok) {
+            mostrarErrorLogin(res.error || 'Acceso denegado');
+            return;
+          }
+          token = res.token;
+          userEmail = res.email;
+          userNombre = res.nombre || '';
+          userFoto = res.foto || '';
+          userRol = res.rol || 'admin';
+          localStorage.setItem(STORAGE_KEY, token);
+          localStorage.setItem(STORAGE_EMAIL, userEmail);
+          localStorage.setItem(STORAGE_ROL, userRol);
+          if (userNombre) localStorage.setItem(STORAGE_NOMBRE, userNombre);
+          if (userFoto) localStorage.setItem(STORAGE_FOTO, userFoto);
+          mostrarApp();
+        })
+        .catch(function(){
+          mostrarErrorLogin('Error de conexión con Google');
+        });
+    };
+
+    function initGoogleSignIn() {
+      if (!GOOGLE_CLIENT_ID) {
+        $('google-signin-btn').innerHTML =
+          '<p style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;">' +
+          'Google Sign-In no configurado a&uacute;n.</p>';
+        return;
+      }
+      if (typeof google === 'undefined' || !google.accounts) {
+        setTimeout(initGoogleSignIn, 300);
+        return;
+      }
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleSignIn
+      });
+      google.accounts.id.renderButton($('google-signin-btn'), {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular',
+        width: 320
+      });
+    }
+
+    // ============ APP ============
+    function mostrarApp() {
+      hide($('login-screen'));
+      $('app').classList.add('show');
+      // Avatar
+      $('user-email').textContent = userEmail;
+      var avatar = $('user-avatar');
+      if (userFoto) {
+        avatar.innerHTML = '<img src="' + escapeHtml(userFoto) + '" alt="">';
+      } else {
+        avatar.textContent = (userEmail || 'U').charAt(0).toUpperCase();
+      }
+      aplicarRol();
+      // Cargar dashboard inicial
+      cargarTab('dashboard');
+    }
+
+    // Muestra/oculta pestañas según el rol del usuario
+    function aplicarRol() {
+      var soloAdmin = ['eventos', 'titanes', 'pagos'];  // pestañas exclusivas de admin
+      document.querySelectorAll('.app-tab').forEach(function(btn){
+        var tab = btn.dataset.tab;
+        if (soloAdmin.indexOf(tab) >= 0) {
+          btn.style.display = (userRol === 'admin') ? '' : 'none';
         }
-        return { ok: true };
+      });
+      // Etiqueta de rol junto al email
+      var badge = $('user-rol-badge');
+      if (badge) {
+        badge.textContent = userRol === 'admin' ? 'Administrador' : 'Titán';
+        badge.style.display = '';
       }
     }
-    return { ok: false, error: 'Lead no encontrado en esta campaña' };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  } finally {
-    try { lock.releaseLock(); } catch (e) {}
-  }
-}
 
-// ============================================================
-// Helpers
-// ============================================================
-function mapHeaders(h) {
-  return {
-    lead_email: h.indexOf('lead_email'),
-    campania_id: h.indexOf('campania_id'),
-    estado: h.indexOf('estado'),
-    titan_asignado: h.indexOf('titan_asignado'),
-    tipo: h.indexOf('tipo'),
-    acompanante_de: h.indexOf('acompanante_de'),
-    fecha_asignacion: h.indexOf('fecha_asignacion'),
-    fecha_ultimo_cambio: h.indexOf('fecha_ultimo_cambio'),
-    notas: h.indexOf('notas'),
-    registrado_por: h.indexOf('registrado_por'),
-    intentos: h.indexOf('intentos')
-  };
-}
+    function logout() {
+      [STORAGE_KEY, STORAGE_EMAIL, STORAGE_NOMBRE, STORAGE_FOTO, STORAGE_ROL].forEach(function(k){
+        localStorage.removeItem(k); sessionStorage.removeItem(k);
+      });
+      token = null;
+      userEmail = null;
+      userRol = null;
+      location.reload();
+    }
+    $('btn-logout').addEventListener('click', logout);
 
-// Construye un índice {email: {datos}} de la maestra UNA sola vez
-function construirIndiceMaestra() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var maestra = ss.getSheetByName('contactos_maestra');
-  var indice = {};
-  if (!maestra) return indice;
-  var mData = maestra.getDataRange().getValues();
-  var mh = mData[0];
-  var iE = mh.indexOf('email');
-  var iN = mh.indexOf('nombre'), iA = mh.indexOf('apellido');
-  var iT = mh.indexOf('telefono'), iW = mh.indexOf('whatsapp'), iG = mh.indexOf('grupo_evento');
-  for (var k = 1; k < mData.length; k++) {
-    var em = String(mData[k][iE] || '').toLowerCase();
-    if (!em) continue;
-    indice[em] = {
-      nombre: iN>=0 ? (mData[k][iN]||'') : '',
-      apellido: iA>=0 ? (mData[k][iA]||'') : '',
-      telefono: iT>=0 ? (mData[k][iT]||'') : '',
-      whatsapp: iW>=0 ? (mData[k][iW]||'') : '',
-      grupo: iG>=0 ? (mData[k][iG]||'') : ''
+    // ============ TABS ============
+    document.querySelectorAll('.app-tab').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var tab = this.dataset.tab;
+        document.querySelectorAll('.app-tab').forEach(function(b){ b.classList.remove('active'); });
+        this.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(function(c){ c.style.display = 'none'; });
+        $('tab-' + tab).style.display = '';
+        cargarTab(tab);
+      });
+    });
+
+    function cargarTab(tab) {
+      if (tab === 'dashboard') cargarDashboard();
+      if (tab === 'misleads') cargarMisLeads();
+      if (tab === 'contactos') cargarContactos();
+      if (tab === 'pagos') cargarPagos();
+      if (tab === 'eventos') cargarEventos();
+      if (tab === 'titanes') cargarTitanes();
+      if (tab === 'cuenta') cargarCuenta();
+    }
+
+    // ============ DASHBOARD ============
+    function cargarDashboard() {
+      apiGet('crm_stats').then(function(res){
+        if (!res.ok) return;
+        var s = res.data;
+        var monedaTotal = s.ingresos_vip ? ('$' + s.ingresos_vip.toFixed(2) + ' USD') : '$0';
+        var html =
+          '<div class="stat-card"><div class="label">Total contactos</div><div class="value gold">' + (s.total_contactos || 0) + '</div><div class="extra">Toda la base</div></div>' +
+          '<div class="stat-card"><div class="label">Money Magnet 2026</div><div class="value gold">' + (s.total_money_magnet || 0) + '</div><div class="extra">Webinar pr&oacute;ximo</div></div>' +
+          '<div class="stat-card"><div class="label">Hist&oacute;rico</div><div class="value">' + (s.total_historicos || 0) + '</div><div class="extra">Base anterior</div></div>' +
+          '<div class="stat-card"><div class="label">Hoy</div><div class="value">' + (s.registros_hoy || 0) + '</div><div class="extra">&Uacute;ltimas 24h (MM)</div></div>' +
+          '<div class="stat-card"><div class="label">Esta semana</div><div class="value">' + (s.registros_semana || 0) + '</div><div class="extra">&Uacute;ltimos 7 d&iacute;as (MM)</div></div>' +
+          '<div class="stat-card"><div class="label">VIPs pagados</div><div class="value gold">' + (s.total_vip_pagados || 0) + '</div><div class="extra">' + (s.total_vip_1 || 0) + ' &times; 1P &middot; ' + (s.total_vip_2 || 0) + ' &times; 2P</div></div>' +
+          '<div class="stat-card"><div class="label">Ingresos VIP</div><div class="value gold">' + monedaTotal + '</div><div class="extra">Solo producci&oacute;n</div></div>' +
+          '<div class="stat-card"><div class="label">Por grupo MM</div>' +
+            '<div class="value" style="font-size:18px;">' +
+            ((s.por_grupo && s.por_grupo.latam_bajo) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.latam_alto) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.europa) || 0) +
+            '</div><div class="extra">Latam-B / Latam-A / Europa</div></div>';
+        $('stats-grid').innerHTML = html;
+      });
+    }
+
+    // ============ CONTACTOS ============
+    var contactosTimer = null;
+
+    // Mapeo país (texto) → código ISO 2 letras para banderas
+    var PAIS_CODIGO = {
+      'colombia':'co','mexico':'mx','méxico':'mx','peru':'pe','perú':'pe',
+      'argentina':'ar','chile':'cl','ecuador':'ec','venezuela':'ve','bolivia':'bo',
+      'uruguay':'uy','paraguay':'py','costa rica':'cr','panama':'pa','panamá':'pa',
+      'guatemala':'gt','honduras':'hn','el salvador':'sv','nicaragua':'ni',
+      'republica dominicana':'do','dominican republic':'do','cuba':'cu',
+      'puerto rico':'pr','espana':'es','españa':'es','spain':'es',
+      'estados unidos':'us','united states':'us','usa':'us','eeuu':'us',
+      'brasil':'br','brazil':'br','italia':'it','francia':'fr','alemania':'de',
+      'reino unido':'gb','uk':'gb','portugal':'pt','holanda':'nl','suiza':'ch'
     };
-  }
-  return indice;
-}
+    function codigoBandera(paisTxt) {
+      var p = String(paisTxt || '').toLowerCase().trim();
+      if (!p) return '';
+      if (PAIS_CODIGO[p]) return PAIS_CODIGO[p];
+      // Si ya es código de 2 letras
+      if (p.length === 2) return p;
+      return '';
+    }
 
-function filaALead(row, idx, filaNum, indiceMaestra) {
-  var em = String(row[idx.lead_email]).toLowerCase();
-  var info = (indiceMaestra && indiceMaestra[em]) || { nombre:'', apellido:'', telefono:'', whatsapp:'', grupo:'' };
-  return {
-    lead_email: row[idx.lead_email],
-    nombre: info.nombre, apellido: info.apellido,
-    telefono: info.telefono, whatsapp: info.whatsapp, grupo: info.grupo,
-    estado: row[idx.estado],
-    tipo: row[idx.tipo] || 'principal',
-    acompanante_de: row[idx.acompanante_de] || '',
-    notas: row[idx.notas] || '',
-    intentos: Number(row[idx.intentos] || 0),
-    campania_id: row[idx.campania_id]
-  };
-}
+    function cargarContactos() {
+      var params = {
+        q: $('filtro-busqueda').value,
+        origen: $('filtro-origen').value,
+        grupo: $('filtro-grupo').value,
+        vip: $('filtro-vip').value,
+        limit: 500
+      };
+      apiGet('crm_contactos', params).then(function(res){
+        if (!res.ok) return;
+        var rows = res.data.rows;
+        $('contactos-count').textContent = res.data.total;
+        if (rows.length === 0) {
+          $('tbody-contactos').innerHTML = '<tr><td colspan="9" class="table-empty">No hay contactos que coincidan</td></tr>';
+          return;
+        }
+        var html = rows.map(function(c){
+          var code = codigoBandera(c.pais);
+          var paisTxt = c.pais ? c.pais.charAt(0).toUpperCase() + c.pais.slice(1) : '-';
+          var bandera = code
+            ? '<span class="pill-flag"><img src="https://flagcdn.com/16x12/' + code + '.png" alt=""> ' + escapeHtml(paisTxt) + '</span>'
+            : (c.pais ? escapeHtml(paisTxt) : '-');
+          var esVIP = String(c.etiquetas || '').indexOf('vip_pagado') >= 0;
+          var origenPill = c.es_money_magnet
+            ? '<span class="pill yellow">MM 2026</span>'
+            : '<span class="pill gray">Hist&oacute;rico</span>';
+          var grupoTxt = c.grupo
+            ? '<span class="pill blue">' + escapeHtml(c.grupo) + '</span>'
+            : '-';
+          return '<tr style="cursor:pointer;" onclick="abrirDetalleContacto(\'' + escapeHtml(c.email) + '\')">' +
+            '<td>' + (c.fecha_registro ? formatFecha(c.fecha_registro) : '-') + '</td>' +
+            '<td>' + escapeHtml((c.nombre + ' ' + (c.apellido||'')).trim() || '-') + '</td>' +
+            '<td>' + escapeHtml(c.email) + '</td>' +
+            '<td>' + escapeHtml(c.telefono || c.whatsapp || '-') + '</td>' +
+            '<td>' + bandera + '</td>' +
+            '<td>' + origenPill + '</td>' +
+            '<td>' + grupoTxt + '</td>' +
+            '<td>' + (esVIP ? '<span class="pill green">VIP</span>' : '<span class="pill gray">Gratis</span>') + '</td>' +
+            '<td style="font-family:monospace;font-size:11px;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+        $('tbody-contactos').innerHTML = html;
+      });
+    }
 
-// Devuelve el id de la campaña activa (evento activo)
-function obtenerCampaniaActivaId() {
-  var props = PropertiesService.getScriptProperties();
-  return props.getProperty('EVENTO_ACTIVO_ID') || 'money_magnet';
-}
+    ['filtro-busqueda', 'filtro-origen', 'filtro-grupo', 'filtro-vip'].forEach(function(id){
+      $(id).addEventListener('input', function(){
+        clearTimeout(contactosTimer);
+        contactosTimer = setTimeout(cargarContactos, 300);
+      });
+    });
 
-// ============================================================
-// Configurar el máximo de intentos sin respuesta (solo admin)
-// ============================================================
-function crmConfigIntentos(maxIntentos) {
-  try {
-    var n = parseInt(maxIntentos, 10);
-    if (!n || n < 1 || n > 10) return { ok: false, error: 'Debe ser un número entre 1 y 10' };
-    PropertiesService.getScriptProperties().setProperty('LEAD_MAX_INTENTOS', String(n));
-    return { ok: true, max_intentos: n };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-}
+    // ============ PAGOS ============
+    function cargarPagos() {
+      var params = {
+        estado: $('filtro-estado').value,
+        modo: $('filtro-modo').value
+      };
+      apiGet('crm_pagos', params).then(function(res){
+        if (!res.ok) return;
+        var rows = res.data.rows;
+        $('pagos-count').textContent = res.data.total;
+        if (rows.length === 0) {
+          $('tbody-pagos').innerHTML = '<tr><td colspan="8" class="table-empty">No hay pagos que coincidan</td></tr>';
+          return;
+        }
+        var html = rows.map(function(p){
+          return '<tr>' +
+            '<td>' + formatFecha(p.fecha) + '</td>' +
+            '<td>' + escapeHtml(p.email) + '</td>' +
+            '<td>' + formatPlan(p.plan) + '</td>' +
+            '<td>$' + escapeHtml(String(p.amount)) + ' ' + escapeHtml(p.currency) + '</td>' +
+            '<td>' + pillEstado(p.estado) + '</td>' +
+            '<td>' + escapeHtml(p.paymentMethod || '-') + '</td>' +
+            '<td>' + (p.modo === 'production' ? '<span class="pill green">Prod</span>' : '<span class="pill yellow">Sandbox</span>') + '</td>' +
+            '<td style="font-family:monospace;font-size:10px;color:rgba(255,255,255,0.5);">' + escapeHtml(p.referenceCode) + '</td>' +
+            '</tr>';
+        }).join('');
+        $('tbody-pagos').innerHTML = html;
+      });
+    }
 
-function crmObtenerConfigIntentos() {
-  return { ok: true, max_intentos: leadMaxIntentos() };
-}
+    $('filtro-estado').addEventListener('change', cargarPagos);
+    $('filtro-modo').addEventListener('change', cargarPagos);
+
+    // ============ GESTOR DE EVENTOS ============
+    var GRUPOS_EVENTO = [
+      { key: 'latam_bajo', label: 'Latam Bajo (Colombia, Perú, etc.)' },
+      { key: 'latam_alto', label: 'Latam Alto + Norteamérica' },
+      { key: 'europa', label: 'Europa' }
+    ];
+    var eventosCache = [];
+
+    function cargarEventos() {
+      apiGet('crm_eventos_listar').then(function(res){
+        if (!res.ok) { $('eventos-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(res.error||'') + '</div>'; return; }
+        eventosCache = res.data || [];
+        if (eventosCache.length === 0) {
+          $('eventos-lista').innerHTML = '<div style="color:#9CA3AF;">No hay eventos. Crea uno con "+ Nuevo evento".</div>';
+          return;
+        }
+        var html = eventosCache.map(function(ev){
+          var sectoresResumen = GRUPOS_EVENTO.map(function(g){
+            var s = ev.sectores[g.key] || {};
+            var teams = s.link_teams ? '<span style="color:#34d399;">✓ Teams</span>' : '<span style="color:#f87171;">✗ sin Teams</span>';
+            return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12.5px;">' +
+              '<span style="color:#C9CCD6;">' + escapeHtml(g.label) + '</span>' +
+              '<span>' + (s.fecha_display ? escapeHtml(s.fecha_display) + ' · ' : '') + teams + '</span>' +
+            '</div>';
+          }).join('');
+          var urlEvento = 'https://magnet.academiaintrade.com/?ev=' + ev.evento_id;
+          var btnDesactivar = ev.activo
+            ? '<button onclick="desactivarEvento(\'' + ev.evento_id + '\')" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;margin-left:8px;">Desactivar</button>'
+            : '';
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 20px;margin-bottom:14px;' + (ev.activo ? '' : 'opacity:0.6;') + '">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">' +
+              '<div><span style="font-weight:700;font-size:16px;">' + escapeHtml(ev.nombre_campania) + '</span>' +
+              (ev.activo ? ' <span style="background:#F5B800;color:#0B1131;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">ACTIVO</span>' : ' <span style="background:rgba(255,255,255,0.1);color:#9CA3AF;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">INACTIVO</span>') +
+              '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Evento público: ' + escapeHtml(ev.nombre_evento) + '</div></div>' +
+              '<div><button onclick="editarEvento(\'' + ev.evento_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Editar</button>' + btnDesactivar + '</div>' +
+            '</div>' +
+            '<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+              '<code style="font-size:11.5px;color:#FFC832;word-break:break-all;">' + urlEvento + '</code>' +
+              '<button onclick="copiarURL(\'' + urlEvento + '\', this)" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;white-space:nowrap;">Copiar</button>' +
+            '</div>' +
+            sectoresResumen +
+          '</div>';
+        }).join('');
+        $('eventos-lista').innerHTML = html;
+      });
+    }
+
+    window.nuevoEvento = function() {
+      abrirModalEvento(null);
+    };
+    window.editarEvento = function(id) {
+      var ev = eventosCache.filter(function(e){ return e.evento_id === id; })[0];
+      abrirModalEvento(ev);
+    };
+
+    function abrirModalEvento(ev) {
+      var esNuevo = !ev;
+      ev = ev || { nombre_campania: '', nombre_evento: '', activo: false, sectores: {} };
+
+      var TIMEZONES = [
+        { tz: '-05:00', label: 'Colombia / Perú / Ecuador (GMT-5)' },
+        { tz: '-06:00', label: 'México centro (GMT-6)' },
+        { tz: '-03:00', label: 'Argentina / Chile (GMT-3)' },
+        { tz: '+02:00', label: 'Europa Central (GMT+2)' },
+        { tz: '+01:00', label: 'España invierno (GMT+1)' },
+        { tz: '-04:00', label: 'Venezuela / Bolivia (GMT-4)' }
+      ];
+
+      var sectoresHtml = GRUPOS_EVENTO.map(function(g){
+        var s = ev.sectores[g.key] || {};
+        // separar fecha_iso en datetime-local + tz
+        var dtLocal = '', tzVal = (g.key === 'europa' ? '+02:00' : '-05:00');
+        if (s.fecha_iso) {
+          var m = s.fecha_iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?([+-]\d{2}:\d{2})?$/);
+          if (m) { dtLocal = m[1]; if (m[2]) tzVal = m[2]; }
+        }
+        var tzOpts = TIMEZONES.map(function(t){
+          return '<option value="' + t.tz + '"' + (t.tz === tzVal ? ' selected' : '') + '>' + t.label + '</option>';
+        }).join('');
+        var monedas = ['USD','COP','EUR'];
+        var monedaActual = s.moneda || (g.key === 'europa' ? 'EUR' : 'USD');
+        var monedaOpts = monedas.map(function(mo){
+          return '<option value="' + mo + '"' + (mo === monedaActual ? ' selected' : '') + '>' + mo + '</option>';
+        }).join('');
+
+        return '<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px;margin-bottom:12px;">' +
+          '<div style="font-weight:700;color:#F5B800;font-size:13px;margin-bottom:10px;">' + escapeHtml(g.label) + '</div>' +
+          '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">📅 Fecha y hora del evento</label>' +
+          '<input type="datetime-local" data-grupo="' + g.key + '" data-campo="_dtlocal" value="' + dtLocal + '" oninput="actualizarDisplayFecha(\'' + g.key + '\')" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;color-scheme:dark;">' +
+          '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">Zona horaria</label>' +
+          '<select data-grupo="' + g.key + '" data-campo="_tz" onchange="actualizarDisplayFecha(\'' + g.key + '\')" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);font-size:12.5px;box-sizing:border-box;">' + tzOpts + '</select>' +
+          '<label style="display:block;font-size:11px;color:#6B7280;margin:6px 0 3px;">Lo que verá el lead (automático)</label>' +
+          '<input data-grupo="' + g.key + '" data-campo="fecha_display" id="disp-fecha-' + g.key + '" value="' + escapeHtml(s.fecha_display || '') + '" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);color:#9CA3AF;font-size:12.5px;box-sizing:border-box;margin-bottom:4px;">' +
+          '<input data-grupo="' + g.key + '" data-campo="hora_texto" id="disp-hora-' + g.key + '" value="' + escapeHtml(s.hora_texto || '') + '" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);color:#9CA3AF;font-size:12.5px;box-sizing:border-box;">' +
+          campo(g.key, 'link_teams', '🎥 Link Microsoft Teams', s.link_teams || '', 'https://teams.microsoft.com/...') +
+          campo(g.key, 'whatsapp', 'Link WhatsApp', s.whatsapp || '', 'https://chat.whatsapp.com/...') +
+          campo(g.key, 'telegram', 'Link Telegram', s.telegram || '', 'https://t.me/...') +
+          '<div style="display:flex;gap:10px;">' +
+            campoMini(g.key, 'precio_vip1', 'Precio VIP 1', s.precio_vip1 != null ? s.precio_vip1 : 15) +
+            campoMini(g.key, 'precio_vip2', 'Precio VIP 2', s.precio_vip2 != null ? s.precio_vip2 : 20) +
+            '<div style="flex:1;"><label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">Moneda</label>' +
+            '<select data-grupo="' + g.key + '" data-campo="moneda" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);font-size:12.5px;box-sizing:border-box;">' + monedaOpts + '</select></div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      var html =
+        '<h2 style="margin:0 0 16px;font-size:20px;">' + (esNuevo ? 'Nuevo evento' : 'Editar evento') + '</h2>' +
+        '<input type="hidden" id="ev-id" value="' + escapeHtml(ev.evento_id || '') + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre de la campaña <span style="color:#6B7280;">(privado, solo tú lo ves)</span></label>' +
+        '<input id="ev-campania" value="' + escapeHtml(ev.nombre_campania || '') + '" placeholder="Money Magnet · 1era serie de eventos" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:14px;box-sizing:border-box;">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre del evento <span style="color:#6B7280;">(público, lo ven los leads en correos y landing)</span></label>' +
+        '<input id="ev-nombre" value="' + escapeHtml(ev.nombre_evento || '') + '" placeholder="Money Magnet" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:14px;box-sizing:border-box;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">' +
+          '<input type="checkbox" id="ev-activo" ' + (ev.activo ? 'checked' : '') + '> Evento activo (sincroniza links y precios con recordatorios, landing y PayU)' +
+        '</label>' +
+        sectoresHtml +
+        '<div style="display:flex;gap:10px;margin-top:16px;">' +
+          '<button onclick="guardarEvento()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar evento</button>' +
+          '<button onclick="cerrarModalEvento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+
+      $('modal-evento-content').innerHTML = html;
+      $('modal-evento').style.display = 'flex';
+    }
+
+    function campo(grupo, campo, label, valor, placeholder) {
+      return '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">' + label + '</label>' +
+        '<input data-grupo="' + grupo + '" data-campo="' + campo + '" value="' + escapeHtml(String(valor)) + '" placeholder="' + escapeHtml(placeholder||'') + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;">';
+    }
+    function campoMini(grupo, campo, label, valor) {
+      return '<div style="flex:1;"><label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">' + label + '</label>' +
+        '<input data-grupo="' + grupo + '" data-campo="' + campo + '" value="' + escapeHtml(String(valor)) + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;"></div>';
+    }
+
+    window.cerrarModalEvento = function() {
+      $('modal-evento').style.display = 'none';
+    };
+
+    window.guardarEvento = function() {
+      var sectores = {};
+      GRUPOS_EVENTO.forEach(function(g){ sectores[g.key] = {}; });
+      var inputs = $('modal-evento-content').querySelectorAll('input[data-grupo], select[data-grupo]');
+      var temp = {};  // acumula _dtlocal y _tz por grupo
+      inputs.forEach(function(inp){
+        var g = inp.getAttribute('data-grupo');
+        var c = inp.getAttribute('data-campo');
+        var val = inp.value.trim();
+        if (c === '_dtlocal' || c === '_tz') {
+          temp[g] = temp[g] || {};
+          temp[g][c] = val;
+          return;
+        }
+        if (c === 'precio_vip1' || c === 'precio_vip2') val = parseFloat(val) || 0;
+        sectores[g][c] = val;
+      });
+      // Componer fecha_iso = datetime-local + ":00" + tz
+      GRUPOS_EVENTO.forEach(function(g){
+        var t = temp[g.key];
+        if (t && t._dtlocal) {
+          sectores[g.key].fecha_iso = t._dtlocal + ':00' + (t._tz || '-05:00');
+        }
+      });
+
+      var evento = {
+        evento_id: $('ev-id').value || null,
+        nombre_campania: $('ev-campania').value.trim(),
+        nombre_evento: $('ev-nombre').value.trim(),
+        activo: $('ev-activo').checked,
+        sectores: sectores
+      };
+      if (!evento.nombre_evento) { alert('Pon el nombre del evento (público)'); return; }
+      if (!evento.nombre_campania) evento.nombre_campania = evento.nombre_evento;
+
+      apiPost('crm_evento_guardar', { evento: evento }).then(function(res){
+        if (res.ok) {
+          cerrarModalEvento();
+          cargarEventos();
+        } else {
+          alert('Error: ' + (res.error || 'no se pudo guardar'));
+        }
+      });
+    };
+
+    window.desactivarEvento = function(id) {
+      if (!confirm('¿Desactivar este evento? El link seguirá existiendo pero dejará de promocionarse y no aparecerá como activo.')) return;
+      apiPost('crm_evento_eliminar', { evento_id: id }).then(function(res){
+        if (res.ok) { cargarEventos(); }
+        else { alert('Error: ' + (res.error || 'no se pudo desactivar')); }
+      });
+    };
+
+    window.copiarURL = function(url, btn) {
+      navigator.clipboard.writeText(url).then(function(){
+        var t = btn.textContent; btn.textContent = '¡Copiado!';
+        setTimeout(function(){ btn.textContent = t; }, 1500);
+      }).catch(function(){
+        prompt('Copia el enlace:', url);
+      });
+    };
+
+    // Autocompleta el texto que ve el lead a partir del datetime + zona horaria
+    window.actualizarDisplayFecha = function(grupoKey) {
+      var cont = $('modal-evento-content');
+      var dtInput = cont.querySelector('input[data-grupo="' + grupoKey + '"][data-campo="_dtlocal"]');
+      var tzInput = cont.querySelector('select[data-grupo="' + grupoKey + '"][data-campo="_tz"]');
+      if (!dtInput || !dtInput.value) return;
+
+      var partes = dtInput.value.split('T');  // ["2026-06-18","20:00"]
+      var fecha = partes[0], hora = partes[1] || '00:00';
+      var d = new Date(fecha + 'T' + hora + ':00');
+
+      var dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+      var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      var fechaTxt = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()];
+
+      // Hora en formato 12h
+      var h = d.getHours(), min = d.getMinutes();
+      var ampm = h >= 12 ? 'PM' : 'AM';
+      var h12 = h % 12; if (h12 === 0) h12 = 12;
+      var horaTxt = h12 + ':' + (min < 10 ? '0' + min : min) + ' ' + ampm;
+
+      // Etiqueta de zona horaria legible
+      var tzLabels = { '-05:00':'hora Colombia', '-06:00':'hora México', '-03:00':'hora Argentina', '+02:00':'hora Europa Central', '+01:00':'hora España', '-04:00':'hora Venezuela' };
+      var tzTxt = tzInput && tzLabels[tzInput.value] ? ' (' + tzLabels[tzInput.value] + ')' : '';
+
+      var dispFecha = $('disp-fecha-' + grupoKey);
+      var dispHora = $('disp-hora-' + grupoKey);
+      if (dispFecha) dispFecha.value = fechaTxt;
+      if (dispHora) dispHora.value = horaTxt + tzTxt;
+    };
+
+    // ============ MIS LEADS ============
+    var LEAD_ESTADOS_CACHE = null;
+    var misLeadsCache = [];
+
+    function cargarMisLeads() {
+      $('misleads-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
+      // Primero cargar los estados disponibles (una vez)
+      var pasoEstados = LEAD_ESTADOS_CACHE
+        ? Promise.resolve({ ok: true, data: LEAD_ESTADOS_CACHE })
+        : apiGet('crm_leads_estados');
+      pasoEstados.then(function(resE){
+        if (resE.ok) LEAD_ESTADOS_CACHE = resE.data;
+        return apiPost('crm_mis_leads', {});
+      }).then(function(res){
+        if (!res.ok) { $('misleads-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        misLeadsCache = res.data || [];
+        $('misleads-count').textContent = misLeadsCache.length;
+        renderMisLeads(res.max || 5);
+      }).catch(function(err){
+        $('misleads-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err && err.message ? err.message : err)) + '<br><span style="color:#9CA3AF;font-size:12px;">Intenta de nuevo con el botón Actualizar.</span></div>';
+      });
+    }
+
+    function etiquetaEstado(val){
+      if (!LEAD_ESTADOS_CACHE) return val;
+      var e = LEAD_ESTADOS_CACHE.filter(function(x){return x.val===val;})[0];
+      return e ? e.label : val;
+    }
+
+    function renderMisLeads(max){
+      if (misLeadsCache.length === 0){
+        $('misleads-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento. <br>Puede que no haya leads disponibles en el pool.</div>';
+        return;
+      }
+      var opcionesEstado = (LEAD_ESTADOS_CACHE||[]).map(function(e){
+        return '<option value="' + e.val + '">' + escapeHtml(e.label) + '</option>';
+      }).join('');
+
+      $('misleads-lista').innerHTML = '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + misLeadsCache.length + ' de ' + max + ' cupos usados</div>' +
+      misLeadsCache.map(function(L, i){
+        var nombre = (L.nombre || '') + ' ' + (L.apellido || '');
+        nombre = nombre.trim() || L.lead_email;
+        var tel = L.telefono || L.whatsapp || '';
+        var wa = (L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
+
+        // Badge de estado actual
+        var estadoColor = '#9CA3AF';
+        if (L.estado === 'no_contactado') estadoColor = '#60a5fa';
+        else if (L.estado === 'no_respondio') estadoColor = '#f59e0b';
+        else if (['confirmado','confirmado_whatsapp','vip_llamada','vip_adicional'].indexOf(L.estado)>=0) estadoColor = '#34d399';
+        else if (['duplicado','erroneo'].indexOf(L.estado)>=0) estadoColor = '#f87171';
+
+        var intentosTxt = (L.estado === 'no_respondio' && L.intentos > 0)
+          ? '<span style="font-size:11px;color:#f59e0b;margin-left:6px;">· ' + L.intentos + ' intento(s)</span>'
+          : '';
+
+        var botonesContacto = '';
+        if (wa) botonesContacto += '<a href="https://wa.me/' + wa + '" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>';
+        if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-phone"></i> Llamar</a>';
+
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div>' +
+              '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' +
+              (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + '</div>' : '') +
+            '</div>' +
+            '<span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto +
+            '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-phone-off"></i> No respondió</button>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+            '<select id="estado-' + i + '" style="flex:1;min-width:180px;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + opcionesEstado + '</select>' +
+            '<button onclick="aplicarEstado(' + i + ',\'' + escapeHtml(L.lead_email) + '\')" style="background:#F5B800;color:#0B1131;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">Guardar estado</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      // Preseleccionar el estado actual en cada select
+      misLeadsCache.forEach(function(L, i){
+        var sel = $('estado-' + i);
+        if (sel) sel.value = L.estado;
+      });
+    }
+
+    window.marcarNoRespondio = function(leadEmail){
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){
+        if (res.ok){
+          if (res.liberado) alert(res.mensaje || 'Lead liberado al pool');
+          else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.');
+          cargarMisLeads();
+        } else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    window.aplicarEstado = function(i, leadEmail){
+      var nuevoEstado = $('estado-' + i).value;
+      var extra = {};
+      if (nuevoEstado === 'acompanante'){
+        var dq = prompt('¿De quién es acompañante? (nombre o correo del lead principal)');
+        if (dq === null) return;
+        extra.acompanante_de = dq;
+      }
+      if (nuevoEstado === 'no_respondio'){
+        // usar el flujo con contador
+        return window.marcarNoRespondio(leadEmail);
+      }
+      apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: nuevoEstado }, extra)).then(function(res){
+        if (res.ok){ cargarMisLeads(); }
+        else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    // ============ TITANES (solo admin) ============
+    var titanesCache = [];
+    function cargarTitanes() {
+      apiGet('crm_titanes_listar').then(function(res){
+        if (!res.ok) { $('titanes-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        titanesCache = res.data || [];
+        if (titanesCache.length === 0) {
+          $('titanes-lista').innerHTML = '<div style="color:#9CA3AF;">No hay Titanes aún. Crea el primero con "+ Nuevo Titán".</div>';
+          return;
+        }
+        $('titanes-lista').innerHTML = titanesCache.map(function(t){
+          var inicial = (t.nombre || t.email || 'T').charAt(0).toUpperCase();
+          var avatar = t.foto_url
+            ? '<img src="' + escapeHtml(t.foto_url) + '" style="width:42px;height:42px;border-radius:50%;object-fit:cover;">'
+            : '<div style="width:42px;height:42px;border-radius:50%;background:rgba(245,184,0,0.2);color:#F5B800;display:flex;align-items:center;justify-content:center;font-weight:700;">' + inicial + '</div>';
+          var estado = t.activo
+            ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">ACTIVO</span>'
+            : '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">DESHABILITADO</span>';
+          var btnToggle = t.activo
+            ? '<button onclick="toggleTitan(\'' + t.titan_id + '\',false)" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Deshabilitar</button>'
+            : '<button onclick="toggleTitan(\'' + t.titan_id + '\',true)" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Habilitar</button>';
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;' + (t.activo ? '' : 'opacity:0.6;') + '">' +
+            avatar +
+            '<div style="flex:1;min-width:0;"><div style="font-weight:700;">' + escapeHtml(t.nombre) + ' ' + estado + '</div>' +
+            '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(t.email) + '</div></div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<button onclick="editarTitan(\'' + t.titan_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Editar</button>' +
+              btnToggle +
+            '</div>' +
+          '</div>';
+        }).join('');
+      });
+    }
+
+    window.nuevoTitan = function(){ abrirModalTitan(null); };
+    window.editarTitan = function(id){
+      abrirModalTitan(titanesCache.filter(function(t){return t.titan_id===id;})[0]);
+    };
+
+    function abrirModalTitan(t){
+      var nuevo = !t;
+      t = t || { nombre:'', email:'', activo:true, foto_url:'' };
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;';
+      var html =
+        '<h2 style="margin:0 0 16px;font-size:20px;">' + (nuevo ? 'Nuevo Titán' : 'Editar Titán') + '</h2>' +
+        '<input type="hidden" id="t-id" value="' + escapeHtml(t.titan_id||'') + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre *</label>' +
+        '<input id="t-nombre" value="' + escapeHtml(t.nombre) + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo *</label>' +
+        '<input id="t-email" type="email" value="' + escapeHtml(t.email) + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">' + (nuevo ? 'Contraseña * (mín. 8)' : 'Nueva contraseña (dejar vacío para no cambiar)') + '</label>' +
+        '<input id="t-password" type="password" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Foto (URL, opcional)</label>' +
+        '<input id="t-foto" value="' + escapeHtml(t.foto_url||'') + '" placeholder="https://..." style="' + inp + '">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">' +
+          '<input type="checkbox" id="t-activo" ' + (t.activo ? 'checked':'') + '> Cuenta activa (puede iniciar sesión)</label>' +
+        '<div style="display:flex;gap:10px;">' +
+          '<button onclick="guardarTitan()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar</button>' +
+          '<button onclick="cerrarModalTitan()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+      $('modal-titan-content').innerHTML = html;
+      $('modal-titan').style.display = 'flex';
+    }
+
+    window.cerrarModalTitan = function(){ $('modal-titan').style.display = 'none'; };
+
+    window.guardarTitan = function(){
+      var titan = {
+        titan_id: $('t-id').value || null,
+        nombre: $('t-nombre').value.trim(),
+        email: $('t-email').value.trim(),
+        password: $('t-password').value,
+        foto_url: $('t-foto').value.trim(),
+        activo: $('t-activo').checked
+      };
+      if (!titan.nombre || !titan.email) { alert('Nombre y correo son obligatorios'); return; }
+      apiPost('crm_titan_guardar', { titan: titan }).then(function(res){
+        if (res.ok) { cerrarModalTitan(); cargarTitanes(); }
+        else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    window.toggleTitan = function(id, activar){
+      var accion = activar ? 'habilitar' : 'deshabilitar';
+      if (!confirm('¿Seguro que quieres ' + accion + ' este Titán?')) return;
+      apiPost('crm_titan_toggle', { titan_id: id, activar: activar }).then(function(res){
+        if (res.ok) cargarTitanes();
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
+    function cargarCuenta() {
+      // Los Titanes no ven el perfil de admin ni el OAuth: solo cambian su contraseña
+      var perfilCard = document.querySelector('#tab-cuenta .perfil-admin-card');
+      var oauthCard = document.querySelector('#tab-cuenta .oauth-card');
+      if (userRol === 'titan') {
+        if (perfilCard) perfilCard.style.display = 'none';
+        if (oauthCard) oauthCard.style.display = 'none';
+        return;  // no llamamos crm_perfil_obtener (es de admin)
+      }
+      if (perfilCard) perfilCard.style.display = '';
+      if (oauthCard) oauthCard.style.display = '';
+      apiGet('crm_perfil_obtener').then(function(res){
+        if (!res.ok) return;
+        var d = res.data;
+        $('perfil-nombre').value = d.nombre || '';
+        $('perfil-email-rec').value = d.email_recuperacion || '';
+        // El Client ID vive en el frontend (constante GOOGLE_CLIENT_ID)
+        var activo = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.indexOf('apps.googleusercontent.com') >= 0);
+        $('oauth-estado').textContent = activo
+          ? '✓ Google OAuth está activo. Puedes iniciar sesión con tu cuenta de Google.'
+          : 'Google OAuth no está configurado. Pega tu Client ID en la constante GOOGLE_CLIENT_ID del código.';
+        $('oauth-estado').style.color = activo ? '#34d399' : '#9CA3AF';
+      });
+    }
+
+    window.guardarPerfil = function() {
+      var datos = {
+        nombre: $('perfil-nombre').value.trim(),
+        email_recuperacion: $('perfil-email-rec').value.trim()
+      };
+      $('perfil-msg').textContent = 'Guardando…';
+      apiPost('crm_perfil_guardar', { datos: datos }).then(function(res){
+        $('perfil-msg').textContent = res.ok ? '✓ Guardado' : ('Error: ' + (res.error||''));
+        $('perfil-msg').style.color = res.ok ? '#34d399' : '#f87171';
+        setTimeout(function(){ $('perfil-msg').textContent=''; }, 3000);
+      });
+    };
+
+    window.cambiarPassword = function() {
+      var vieja = $('pass-vieja').value;
+      var nueva = $('pass-nueva').value;
+      if (nueva.length < 8) { $('pass-msg').textContent='Mín. 8 caracteres'; $('pass-msg').style.color='#f87171'; return; }
+      $('pass-msg').textContent = 'Cambiando…';
+      // Admin y Titán usan endpoints distintos
+      var endpoint = (userRol === 'titan') ? 'crm_titan_cambiar_password' : 'crm_cambiar_password';
+      apiPost(endpoint, { password_vieja: vieja, password_nueva: nueva }).then(function(res){
+        $('pass-msg').textContent = res.ok ? '✓ Contraseña cambiada' : ('Error: ' + (res.error||''));
+        $('pass-msg').style.color = res.ok ? '#34d399' : '#f87171';
+        if (res.ok) { $('pass-vieja').value=''; $('pass-nueva').value=''; }
+        setTimeout(function(){ $('pass-msg').textContent=''; }, 4000);
+      });
+    };
+
+
+    // ============ MODAL DETALLE CONTACTO ============
+    window.abrirDetalleContacto = function(email) {
+      apiGet('crm_contacto_detalle', { email: email }).then(function(res){
+        if (!res.ok || !res.data.contacto) return;
+        var c = res.data.contacto;
+        var pagos = res.data.pagos || [];
+
+        var pagosHtml = pagos.length === 0 ? '<p style="color:rgba(255,255,255,0.5);font-size:13px;">Sin pagos registrados</p>' :
+          pagos.map(function(p){
+            return '<div style="background:rgba(255,255,255,0.04);padding:12px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;">' +
+              '<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><strong>' + formatPlan(p.plan) + '</strong>' + pillEstado(p.estado) + '</div>' +
+              '<div style="color:rgba(255,255,255,0.6);font-size:12px;">$' + escapeHtml(String(p.amount)) + ' ' + escapeHtml(p.currency) + ' &middot; ' + formatFecha(p.fecha_intencion) + '</div>' +
+              '<div style="color:rgba(255,255,255,0.4);font-size:11px;font-family:monospace;margin-top:4px;">' + escapeHtml(p.referenceCode) + '</div>' +
+            '</div>';
+          }).join('');
+
+        $('modal-content').innerHTML =
+          '<h2 style="font-family:Montserrat,sans-serif;font-size:22px;margin-bottom:6px;">' + escapeHtml((c.nombre || '') + ' ' + (c.apellido || '')) + '</h2>' +
+          '<p style="color:rgba(255,255,255,0.6);font-size:13px;margin-bottom:24px;">' + escapeHtml(c.email) + '</p>' +
+          '<div class="detail-section">' +
+            '<h3>Informaci&oacute;n personal</h3>' +
+            '<div class="detail-grid">' +
+              '<div class="item"><div class="lbl">Tel&eacute;fono</div><div class="val">' + escapeHtml(c.telefono || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Pa&iacute;s</div><div class="val">' + escapeHtml(c.pais || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Sexo</div><div class="val">' + (c.sexo === 'M' ? 'Hombre' : c.sexo === 'F' ? 'Mujer' : '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Fecha de registro</div><div class="val">' + formatFecha(c.fecha_registro) + '</div></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Evento</h3>' +
+            '<div class="detail-grid">' +
+              '<div class="item"><div class="lbl">Grupo</div><div class="val">' + escapeHtml(c.grupo_evento || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Fecha del evento</div><div class="val">' + escapeHtml(c.fecha_evento || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Ticket ID</div><div class="val" style="font-family:monospace;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</div></div>' +
+              '<div class="item"><div class="lbl">Estado</div><div class="val">' + escapeHtml(c.estado || '-') + '</div></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Etiquetas</h3>' +
+            '<div style="color:rgba(255,255,255,0.7);font-size:13px;">' + escapeHtml(c.etiquetas || 'Sin etiquetas') + '</div>' +
+          '</div>' +
+          '<div class="detail-section">' +
+            '<h3>Pagos VIP (' + pagos.length + ')</h3>' +
+            pagosHtml +
+          '</div>';
+        $('modal-detalle').classList.add('show');
+      });
+    };
+
+    window.cerrarModal = function() {
+      $('modal-detalle').classList.remove('show');
+    };
+
+    // ============ INICIALIZACIÓN ============
+    function init() {
+      // Restaurar sesión si existe
+      token = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+      userEmail = localStorage.getItem(STORAGE_EMAIL) || sessionStorage.getItem(STORAGE_EMAIL);
+      userNombre = localStorage.getItem(STORAGE_NOMBRE) || '';
+      userFoto = localStorage.getItem(STORAGE_FOTO) || '';
+      userRol = localStorage.getItem(STORAGE_ROL) || sessionStorage.getItem(STORAGE_ROL) || 'admin';
+
+      if (token && userEmail) {
+        // Verificar token y refrescar el rol desde el backend
+        apiGet('crm_sesion_actual').then(function(res){
+          if (res && res.ok) {
+            userRol = res.rol || userRol;
+            mostrarApp();
+          } else {
+            logout();
+          }
+        }).catch(function(){
+          logout();
+        });
+      }
+
+      initGoogleSignIn();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>
