@@ -697,6 +697,13 @@
         </div>
         <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Gestiona tu equipo de ventas. Cada Titán puede iniciar sesión con su correo y contraseña.</p>
         <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:34px;border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;">
+          <h2 class="section-title" style="margin:0;">Rangos y comisiones</h2>
+          <button onclick="nuevoRango()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo rango</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 16px;">Define cuánto gana cada rango: % por evento, % por cierre de Intrader, y % para quien confirmó el lead.</p>
+        <div id="rangos-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
       </section>
 
       <section id="tab-cuenta" class="tab-content" style="display:none;">
@@ -748,6 +755,14 @@
     <div class="modal" style="max-width:460px;">
       <button class="close" onclick="cerrarModalTitan()">&times;</button>
       <div id="modal-titan-content"></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL RANGO ============ -->
+  <div id="modal-rango" class="modal-overlay" onclick="if(event.target===this)cerrarModalRango()" style="display:none;">
+    <div class="modal" style="max-width:440px;">
+      <button class="close" onclick="cerrarModalRango()">&times;</button>
+      <div id="modal-rango-content"></div>
     </div>
   </div>
 
@@ -1495,6 +1510,7 @@
     // ============ TITANES (solo admin) ============
     var titanesCache = [];
     function cargarTitanes() {
+      cargarRangos();
       apiGet('crm_titanes_listar').then(function(res){
         if (!res.ok) { $('titanes-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         titanesCache = res.data || [];
@@ -1546,6 +1562,11 @@
         '<input id="t-password" type="password" style="' + inp + '">' +
         '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Foto (URL, opcional)</label>' +
         '<input id="t-foto" value="' + escapeHtml(t.foto_url||'') + '" placeholder="https://..." style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Rango</label>' +
+        '<select id="t-rango" style="' + inp + '">' +
+          '<option value="">— Sin rango —</option>' +
+          rangosCache.map(function(rg){ return '<option value="' + rg.rango_id + '"' + (t.rango_id===rg.rango_id?' selected':'') + '>' + escapeHtml(rg.nombre) + '</option>'; }).join('') +
+        '</select>' +
         '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">' +
           '<input type="checkbox" id="t-activo" ' + (t.activo ? 'checked':'') + '> Cuenta activa (puede iniciar sesión)</label>' +
         '<div style="display:flex;gap:10px;">' +
@@ -1568,8 +1589,19 @@
         activo: $('t-activo').checked
       };
       if (!titan.nombre || !titan.email) { alert('Nombre y correo son obligatorios'); return; }
+      var rangoSel = $('t-rango') ? $('t-rango').value : '';
       apiPost('crm_titan_guardar', { titan: titan }).then(function(res){
-        if (res.ok) { cerrarModalTitan(); cargarTitanes(); }
+        if (res.ok) {
+          // Asignar rango (si se eligió) usando el id devuelto o el existente
+          var tid = res.titan_id || titan.titan_id;
+          if (tid && rangoSel) {
+            apiPost('crm_asignar_rango', { titan_id: tid, rango_id: rangoSel }).then(function(){
+              cerrarModalTitan(); cargarTitanes();
+            });
+          } else {
+            cerrarModalTitan(); cargarTitanes();
+          }
+        }
         else { alert('Error: ' + (res.error||'')); }
       });
     };
@@ -1579,6 +1611,83 @@
       if (!confirm('¿Seguro que quieres ' + accion + ' este Titán?')) return;
       apiPost('crm_titan_toggle', { titan_id: id, activar: activar }).then(function(res){
         if (res.ok) cargarTitanes();
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
+    // ============ RANGOS ============
+    var rangosCache = [];
+    function cargarRangos() {
+      apiGet('crm_rangos_listar').then(function(res){
+        if (!res.ok) { $('rangos-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        rangosCache = res.data || [];
+        if (rangosCache.length === 0) {
+          $('rangos-lista').innerHTML = '<div style="color:#9CA3AF;">No hay rangos. Crea el primero.</div>';
+          return;
+        }
+        $('rangos-lista').innerHTML = rangosCache.map(function(r){
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+            '<div><span style="font-weight:700;">' + escapeHtml(r.nombre) + '</span> <span style="font-size:11px;color:#6B7280;">nivel ' + r.orden + '</span>' +
+            '<div style="font-size:12.5px;color:#9CA3AF;margin-top:3px;">Evento: <b style="color:#F5B800;">' + r.pct_evento + '%</b> · Intrader: <b style="color:#F5B800;">' + r.pct_intrader + '%</b> · Confirmador: <b style="color:#F5B800;">' + r.pct_confirmador + '%</b></div></div>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<button onclick="editarRango(\'' + r.rango_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Editar</button>' +
+              '<button onclick="eliminarRango(\'' + r.rango_id + '\')" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Eliminar</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      });
+    }
+
+    window.nuevoRango = function(){ abrirModalRango(null); };
+    window.editarRango = function(id){ abrirModalRango(rangosCache.filter(function(r){return r.rango_id===id;})[0]); };
+
+    function abrirModalRango(r){
+      var nuevo = !r;
+      r = r || { nombre:'', orden:(rangosCache.length+1), pct_evento:0, pct_intrader:0, pct_confirmador:0 };
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;';
+      var html =
+        '<h2 style="margin:0 0 16px;font-size:20px;">' + (nuevo?'Nuevo rango':'Editar rango') + '</h2>' +
+        '<input type="hidden" id="r-id" value="' + escapeHtml(r.rango_id||'') + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre del rango *</label>' +
+        '<input id="r-nombre" value="' + escapeHtml(r.nombre) + '" placeholder="Confirmador, Cierre, Élite..." style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nivel jerárquico (1 = más bajo)</label>' +
+        '<input id="r-orden" type="number" min="1" value="' + r.orden + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">% comisión por evento (venta VIP)</label>' +
+        '<input id="r-evento" type="number" min="0" step="0.5" value="' + r.pct_evento + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">% comisión por cierre de Intrader</label>' +
+        '<input id="r-intrader" type="number" min="0" step="0.5" value="' + r.pct_intrader + '" style="' + inp + '">' +
+        '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">% para quien confirmó el lead</label>' +
+        '<input id="r-confirmador" type="number" min="0" step="0.5" value="' + r.pct_confirmador + '" style="' + inp + '">' +
+        '<div style="display:flex;gap:10px;margin-top:6px;">' +
+          '<button onclick="guardarRango()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar</button>' +
+          '<button onclick="cerrarModalRango()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+      $('modal-rango-content').innerHTML = html;
+      $('modal-rango').style.display = 'flex';
+    }
+
+    window.cerrarModalRango = function(){ $('modal-rango').style.display = 'none'; };
+
+    window.guardarRango = function(){
+      var rango = {
+        rango_id: $('r-id').value || null,
+        nombre: $('r-nombre').value.trim(),
+        orden: parseInt($('r-orden').value,10) || 1,
+        pct_evento: parseFloat($('r-evento').value) || 0,
+        pct_intrader: parseFloat($('r-intrader').value) || 0,
+        pct_confirmador: parseFloat($('r-confirmador').value) || 0
+      };
+      if (!rango.nombre){ alert('Pon el nombre del rango'); return; }
+      apiPost('crm_rango_guardar', { rango: rango }).then(function(res){
+        if (res.ok){ cerrarModalRango(); cargarRangos(); }
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
+    window.eliminarRango = function(id){
+      if (!confirm('¿Eliminar este rango?')) return;
+      apiPost('crm_rango_eliminar', { rango_id: id }).then(function(res){
+        if (res.ok) cargarRangos();
         else alert('Error: ' + (res.error||''));
       });
     };
