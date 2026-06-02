@@ -736,6 +736,18 @@
 
         <!-- Subpestaña Rangos -->
         <div id="subtab-rangos" style="display:none;">
+          <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+            <h3 style="margin:0 0 10px;font-size:14px;color:#60a5fa;">Campañas por modo</h3>
+            <p style="color:#9CA3AF;font-size:12.5px;margin:0 0 12px;">Define qué campaña trabajan los Confirmadores y los Cerradores. Los leads se asignan de la campaña correspondiente.</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:180px;"><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:4px;">Campaña de Confirmadores</label>
+                <select id="cfg-camp-confirmador" style="width:100%;padding:9px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);font-size:13px;"></select></div>
+              <div style="flex:1;min-width:180px;"><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:4px;">Campaña de Cerradores</label>
+                <select id="cfg-camp-cerrador" style="width:100%;padding:9px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);font-size:13px;"></select></div>
+            </div>
+            <button onclick="guardarCampanasModo()" style="background:rgba(96,165,250,0.2);color:#60a5fa;border:1px solid rgba(96,165,250,0.4);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-top:12px;">Guardar campañas</button>
+            <span id="cfg-camp-msg" style="font-size:12px;margin-left:10px;"></span>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
             <span style="color:#9CA3AF;font-size:13px;">% por evento, % por cierre de Intrader, y % para quien confirmó el lead.</span>
             <button onclick="nuevoRango()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo rango</button>
@@ -1510,7 +1522,17 @@
         if (!res.ok) { $('misleads-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         misLeadsCache = res.data || [];
         $('misleads-count').textContent = misLeadsCache.length;
-        renderMisLeads(res.max || 5);
+        // Aviso de fallback / modo de trabajo
+        var avisoHtml = '';
+        if (res.aviso){
+          avisoHtml = '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f59e0b;font-size:13px;">⚠ ' + escapeHtml(res.aviso) + '</div>';
+        }
+        if (res.modo){
+          var modoTxt = res.modo === 'cerrador' ? 'Estás cerrando ventas (Intrader)' : 'Estás confirmando asistencia (webinar)';
+          avisoHtml = '<div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Modo actual: <b style="color:#F5B800;">' + modoTxt + '</b></div>' + avisoHtml;
+        }
+        $('misleads-lista').setAttribute('data-aviso', avisoHtml);
+        renderMisLeads(res.max || 5, avisoHtml);
       }).catch(function(err){
         $('misleads-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err && err.message ? err.message : err)) + '<br><span style="color:#9CA3AF;font-size:12px;">Intenta de nuevo con el botón Actualizar.</span></div>';
       });
@@ -1522,16 +1544,17 @@
       return e ? e.label : val;
     }
 
-    function renderMisLeads(max){
+    function renderMisLeads(max, avisoHtml){
+      avisoHtml = avisoHtml || '';
       if (misLeadsCache.length === 0){
-        $('misleads-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento. <br>Puede que no haya leads disponibles en el pool.</div>';
+        $('misleads-lista').innerHTML = avisoHtml + '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento. <br>Puede que no haya leads disponibles en el pool.</div>';
         return;
       }
       var opcionesEstado = (LEAD_ESTADOS_CACHE||[]).map(function(e){
         return '<option value="' + e.val + '">' + escapeHtml(e.label) + '</option>';
       }).join('');
 
-      $('misleads-lista').innerHTML = '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + misLeadsCache.length + ' de ' + max + ' cupos usados</div>' +
+      $('misleads-lista').innerHTML = avisoHtml + '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + misLeadsCache.length + ' de ' + max + ' cupos usados</div>' +
       misLeadsCache.map(function(L, i){
         var nombre = (L.nombre || '') + ' ' + (L.apellido || '');
         nombre = nombre.trim() || L.lead_email;
@@ -2035,6 +2058,7 @@
     // ============ RANGOS ============
     var rangosCache = [];
     function cargarRangos() {
+      cargarCampanasModo();
       apiGet('crm_rangos_listar').then(function(res){
         if (!res.ok) { $('rangos-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         rangosCache = res.data || [];
@@ -2056,6 +2080,36 @@
     }
 
     window.nuevoRango = function(){ abrirModalRango(null); };
+
+    // Cargar las campañas (eventos) en los selectores de modo
+    function cargarCampanasModo(){
+      apiGet('crm_eventos_listar').then(function(resEv){
+        var eventos = (resEv && resEv.ok) ? (resEv.data || []) : [];
+        apiGet('crm_config_campanas_modo_obtener').then(function(resCfg){
+          var cfg = (resCfg && resCfg.ok) ? resCfg : { campania_confirmador:'', campania_cerrador:'' };
+          var opts = function(sel){
+            return eventos.map(function(ev){
+              var nombre = ev.nombre_campania || ev.nombre_evento || ev.evento_id;
+              return '<option value="' + ev.evento_id + '"' + (ev.evento_id===sel?' selected':'') + '>' + escapeHtml(nombre) + '</option>';
+            }).join('');
+          };
+          if ($('cfg-camp-confirmador')) $('cfg-camp-confirmador').innerHTML = '<option value="">— Evento activo —</option>' + opts(cfg.campania_confirmador);
+          if ($('cfg-camp-cerrador')) $('cfg-camp-cerrador').innerHTML = '<option value="">— Evento activo —</option>' + opts(cfg.campania_cerrador);
+        });
+      });
+    }
+
+    window.guardarCampanasModo = function(){
+      var cc = $('cfg-camp-confirmador').value;
+      var ce = $('cfg-camp-cerrador').value;
+      apiPost('crm_config_campanas_modo_guardar', { campania_confirmador: cc, campania_cerrador: ce }).then(function(res){
+        var msg = $('cfg-camp-msg');
+        msg.textContent = res.ok ? '✓ Guardado' : ('Error: ' + (res.error||''));
+        msg.style.color = res.ok ? '#34d399' : '#f87171';
+        setTimeout(function(){ msg.textContent=''; }, 3000);
+      });
+    };
+
     window.editarRango = function(id){ abrirModalRango(rangosCache.filter(function(r){return r.rango_id===id;})[0]); };
 
     function abrirModalRango(r){
