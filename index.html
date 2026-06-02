@@ -14,6 +14,20 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { min-height: 100vh; }
+    /* Fix global: selects y sus opciones con fondo oscuro y texto claro
+       (evita el problema de texto blanco sobre fondo blanco en los desplegables) */
+    select {
+      background-color: #14102b;
+      color: #ffffff;
+      color-scheme: dark;
+    }
+    select option {
+      background-color: #14102b;
+      color: #ffffff;
+    }
+    input[type="datetime-local"], input[type="date"], input[type="time"] {
+      color-scheme: dark;
+    }
     body {
       font-family: 'Inter', sans-serif;
       background: #050010;
@@ -1105,13 +1119,22 @@
               '<span>' + (s.fecha_display ? escapeHtml(s.fecha_display) + ' · ' : '') + teams + '</span>' +
             '</div>';
           }).join('');
-          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 20px;margin-bottom:14px;">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          var urlEvento = 'https://magnet.academiaintrade.com/?ev=' + ev.evento_id;
+          var btnDesactivar = ev.activo
+            ? '<button onclick="desactivarEvento(\'' + ev.evento_id + '\')" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;margin-left:8px;">Desactivar</button>'
+            : '';
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 20px;margin-bottom:14px;' + (ev.activo ? '' : 'opacity:0.6;') + '">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">' +
               '<div><span style="font-weight:700;font-size:16px;">' + escapeHtml(ev.nombre_campania) + '</span>' +
-              (ev.activo ? ' <span style="background:#F5B800;color:#0B1131;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">ACTIVO</span>' : '') +
+              (ev.activo ? ' <span style="background:#F5B800;color:#0B1131;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">ACTIVO</span>' : ' <span style="background:rgba(255,255,255,0.1);color:#9CA3AF;font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;margin-left:8px;">INACTIVO</span>') +
               '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Evento público: ' + escapeHtml(ev.nombre_evento) + '</div></div>' +
-              '<button onclick="editarEvento(\'' + ev.evento_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Editar</button>' +
-            '</div>' + sectoresResumen +
+              '<div><button onclick="editarEvento(\'' + ev.evento_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Editar</button>' + btnDesactivar + '</div>' +
+            '</div>' +
+            '<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+              '<code style="font-size:11.5px;color:#FFC832;word-break:break-all;">' + urlEvento + '</code>' +
+              '<button onclick="copiarURL(\'' + urlEvento + '\', this)" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;white-space:nowrap;">Copiar</button>' +
+            '</div>' +
+            sectoresResumen +
           '</div>';
         }).join('');
         $('eventos-lista').innerHTML = html;
@@ -1150,22 +1173,29 @@
         var tzOpts = TIMEZONES.map(function(t){
           return '<option value="' + t.tz + '"' + (t.tz === tzVal ? ' selected' : '') + '>' + t.label + '</option>';
         }).join('');
+        var monedas = ['USD','COP','EUR'];
+        var monedaActual = s.moneda || (g.key === 'europa' ? 'EUR' : 'USD');
+        var monedaOpts = monedas.map(function(mo){
+          return '<option value="' + mo + '"' + (mo === monedaActual ? ' selected' : '') + '>' + mo + '</option>';
+        }).join('');
 
         return '<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px;margin-bottom:12px;">' +
           '<div style="font-weight:700;color:#F5B800;font-size:13px;margin-bottom:10px;">' + escapeHtml(g.label) + '</div>' +
           '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">📅 Fecha y hora del evento</label>' +
-          '<input type="datetime-local" data-grupo="' + g.key + '" data-campo="_dtlocal" value="' + dtLocal + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;color-scheme:dark;">' +
+          '<input type="datetime-local" data-grupo="' + g.key + '" data-campo="_dtlocal" value="' + dtLocal + '" oninput="actualizarDisplayFecha(\'' + g.key + '\')" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;color-scheme:dark;">' +
           '<label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">Zona horaria</label>' +
-          '<select data-grupo="' + g.key + '" data-campo="_tz" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;">' + tzOpts + '</select>' +
-          campo(g.key, 'fecha_display', 'Texto que ve el lead', s.fecha_display || '', 'Ej: Jueves 18 de junio') +
-          campo(g.key, 'hora_texto', 'Hora (texto que ve el lead)', s.hora_texto || '', 'Ej: 8:00 PM (hora Colombia)') +
+          '<select data-grupo="' + g.key + '" data-campo="_tz" onchange="actualizarDisplayFecha(\'' + g.key + '\')" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);font-size:12.5px;box-sizing:border-box;">' + tzOpts + '</select>' +
+          '<label style="display:block;font-size:11px;color:#6B7280;margin:6px 0 3px;">Lo que verá el lead (automático)</label>' +
+          '<input data-grupo="' + g.key + '" data-campo="fecha_display" id="disp-fecha-' + g.key + '" value="' + escapeHtml(s.fecha_display || '') + '" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);color:#9CA3AF;font-size:12.5px;box-sizing:border-box;margin-bottom:4px;">' +
+          '<input data-grupo="' + g.key + '" data-campo="hora_texto" id="disp-hora-' + g.key + '" value="' + escapeHtml(s.hora_texto || '') + '" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);color:#9CA3AF;font-size:12.5px;box-sizing:border-box;">' +
           campo(g.key, 'link_teams', '🎥 Link Microsoft Teams', s.link_teams || '', 'https://teams.microsoft.com/...') +
           campo(g.key, 'whatsapp', 'Link WhatsApp', s.whatsapp || '', 'https://chat.whatsapp.com/...') +
           campo(g.key, 'telegram', 'Link Telegram', s.telegram || '', 'https://t.me/...') +
           '<div style="display:flex;gap:10px;">' +
             campoMini(g.key, 'precio_vip1', 'Precio VIP 1', s.precio_vip1 != null ? s.precio_vip1 : 15) +
             campoMini(g.key, 'precio_vip2', 'Precio VIP 2', s.precio_vip2 != null ? s.precio_vip2 : 20) +
-            campoMini(g.key, 'moneda', 'Moneda', s.moneda || 'USD') +
+            '<div style="flex:1;"><label style="display:block;font-size:11px;color:#9CA3AF;margin:6px 0 3px;">Moneda</label>' +
+            '<select data-grupo="' + g.key + '" data-campo="moneda" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);font-size:12.5px;box-sizing:border-box;">' + monedaOpts + '</select></div>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -1248,7 +1278,54 @@
       });
     };
 
-    // ============ CUENTA ============
+    window.desactivarEvento = function(id) {
+      if (!confirm('¿Desactivar este evento? El link seguirá existiendo pero dejará de promocionarse y no aparecerá como activo.')) return;
+      apiPost('crm_evento_eliminar', { evento_id: id }).then(function(res){
+        if (res.ok) { cargarEventos(); }
+        else { alert('Error: ' + (res.error || 'no se pudo desactivar')); }
+      });
+    };
+
+    window.copiarURL = function(url, btn) {
+      navigator.clipboard.writeText(url).then(function(){
+        var t = btn.textContent; btn.textContent = '¡Copiado!';
+        setTimeout(function(){ btn.textContent = t; }, 1500);
+      }).catch(function(){
+        prompt('Copia el enlace:', url);
+      });
+    };
+
+    // Autocompleta el texto que ve el lead a partir del datetime + zona horaria
+    window.actualizarDisplayFecha = function(grupoKey) {
+      var cont = $('modal-evento-content');
+      var dtInput = cont.querySelector('input[data-grupo="' + grupoKey + '"][data-campo="_dtlocal"]');
+      var tzInput = cont.querySelector('select[data-grupo="' + grupoKey + '"][data-campo="_tz"]');
+      if (!dtInput || !dtInput.value) return;
+
+      var partes = dtInput.value.split('T');  // ["2026-06-18","20:00"]
+      var fecha = partes[0], hora = partes[1] || '00:00';
+      var d = new Date(fecha + 'T' + hora + ':00');
+
+      var dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+      var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      var fechaTxt = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()];
+
+      // Hora en formato 12h
+      var h = d.getHours(), min = d.getMinutes();
+      var ampm = h >= 12 ? 'PM' : 'AM';
+      var h12 = h % 12; if (h12 === 0) h12 = 12;
+      var horaTxt = h12 + ':' + (min < 10 ? '0' + min : min) + ' ' + ampm;
+
+      // Etiqueta de zona horaria legible
+      var tzLabels = { '-05:00':'hora Colombia', '-06:00':'hora México', '-03:00':'hora Argentina', '+02:00':'hora Europa Central', '+01:00':'hora España', '-04:00':'hora Venezuela' };
+      var tzTxt = tzInput && tzLabels[tzInput.value] ? ' (' + tzLabels[tzInput.value] + ')' : '';
+
+      var dispFecha = $('disp-fecha-' + grupoKey);
+      var dispHora = $('disp-hora-' + grupoKey);
+      if (dispFecha) dispFecha.value = fechaTxt;
+      if (dispHora) dispHora.value = horaTxt + tzTxt;
+    };
+
     function cargarCuenta() {
       apiGet('crm_perfil_obtener').then(function(res){
         if (!res.ok) return;
