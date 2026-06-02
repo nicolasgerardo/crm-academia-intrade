@@ -561,6 +561,7 @@
         <div class="app-tabs">
           <button class="app-tab active" data-tab="dashboard">Dashboard</button>
           <button class="app-tab" data-tab="misleads">Mis Leads</button>
+          <button class="app-tab" data-tab="comisiones">Comisiones</button>
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
           <button class="app-tab" data-tab="eventos">Eventos</button>
@@ -594,6 +595,16 @@
         </div>
         <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Trabaja tus leads asignados. Al cerrar un lead, el sistema te asigna otro automáticamente (máximo 5 a la vez).</p>
         <div id="misleads-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
+      <!-- COMISIONES -->
+      <section id="tab-comisiones" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Comisiones</h2>
+          <button id="btn-reprocesar-com" onclick="reprocesarComisiones()" style="display:none;background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar pagos pendientes</button>
+        </div>
+        <div id="comisiones-resumen" style="display:flex;gap:14px;flex-wrap:wrap;margin:16px 0;"></div>
+        <div id="comisiones-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
       </section>
 
       <!-- CONTACTOS -->
@@ -1023,6 +1034,7 @@
     function cargarTab(tab) {
       if (tab === 'dashboard') cargarDashboard();
       if (tab === 'misleads') cargarMisLeads();
+      if (tab === 'comisiones') cargarComisiones();
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
       if (tab === 'eventos') cargarEventos();
@@ -1504,6 +1516,55 @@
       apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: nuevoEstado }, extra)).then(function(res){
         if (res.ok){ cargarMisLeads(); }
         else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    // ============ COMISIONES ============
+    function cargarComisiones() {
+      $('btn-reprocesar-com').style.display = (userRol === 'admin') ? '' : 'none';
+      $('comisiones-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
+      apiPost('crm_comisiones_listar', {}).then(function(res){
+        if (!res.ok){ $('comisiones-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        var cs = res.data || [];
+        // Resumen
+        $('comisiones-resumen').innerHTML =
+          tarjetaResumen('Confirmadas', '$' + (res.total_calculada||0), '#34d399') +
+          tarjetaResumen('Pendientes de pago', '$' + (res.total_pendiente||0), '#f59e0b');
+        if (cs.length === 0){
+          $('comisiones-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">Aún no hay comisiones registradas.</div>';
+          return;
+        }
+        $('comisiones-lista').innerHTML = cs.map(function(c){
+          var fecha = c.fecha ? new Date(c.fecha).toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) : '';
+          var estadoBadge = c.estado === 'calculada'
+            ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">CONFIRMADA</span>'
+            : (c.estado === 'pendiente_pago'
+              ? '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">PENDIENTE PAGO</span>'
+              : '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">ANULADA</span>');
+          var tipoTxt = c.tipo === 'cerrador' ? 'Cierre VIP' : (c.tipo === 'confirmador' ? 'Confirmó lead' : c.tipo);
+          var quien = (userRol === 'admin') ? ('<div style="font-size:11px;color:#6B7280;">' + escapeHtml(c.titan_email) + '</div>') : '';
+          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+            '<div><div style="font-weight:700;">' + escapeHtml(tipoTxt) + ' ' + estadoBadge + '</div>' +
+            '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(c.lead_email) + ' · ' + fecha + '</div>' + quien + '</div>' +
+            '<div style="text-align:right;"><div style="font-weight:800;color:#F5B800;font-size:17px;">$' + c.monto_comision + ' <span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(c.moneda||'') + '</span></div>' +
+            '<div style="font-size:11px;color:#6B7280;">' + c.pct + '% de $' + c.base_monto + '</div></div>' +
+          '</div>';
+        }).join('');
+      }).catch(function(err){
+        $('comisiones-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>';
+      });
+    }
+
+    function tarjetaResumen(label, valor, color){
+      return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 22px;min-width:160px;">' +
+        '<div style="font-size:12px;color:#9CA3AF;margin-bottom:4px;">' + label + '</div>' +
+        '<div style="font-size:24px;font-weight:800;color:' + color + ';">' + valor + '</div></div>';
+    }
+
+    window.reprocesarComisiones = function(){
+      apiPost('crm_comisiones_reprocesar', {}).then(function(res){
+        if (res.ok){ alert('Listo. ' + (res.actualizadas||0) + ' comisión(es) actualizada(s) con su pago.'); cargarComisiones(); }
+        else alert('Error: ' + (res.error||''));
       });
     };
 
