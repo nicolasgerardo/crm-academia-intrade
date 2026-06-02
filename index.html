@@ -1653,22 +1653,29 @@
     }
     // Detecta el indicativo a partir de un teléfono existente, o usa el del grupo
     function indicativoOpts(telefono){
-      var tel = String(telefono||'');
+      var tel = String(telefono||'').replace(/[^0-9]/g,'');  // solo dígitos
       var detectado = indicativoPorGrupo();
+      // Buscar el indicativo más largo que coincida (para no confundir +57 con +571)
+      var mejor = '';
       for (var p=0;p<PAISES_INDICATIVO.length;p++){
-        if (tel.replace(/[^0-9+]/g,'').indexOf(PAISES_INDICATIVO[p].c) === 0){ detectado = PAISES_INDICATIVO[p].c; break; }
+        var dig = PAISES_INDICATIVO[p].c.replace('+','');
+        if (tel.indexOf(dig) === 0 && dig.length > mejor.length){ mejor = dig; detectado = PAISES_INDICATIVO[p].c; }
       }
       return PAISES_INDICATIVO.map(function(p){
         return '<option value="'+p.c+'"'+(p.c===detectado?' selected':'')+'>'+p.n+' ('+p.c+')</option>';
       }).join('');
     }
-    // Quita el indicativo del número para mostrar solo la parte local
+    // Quita el indicativo del número para mostrar solo la parte local (con o sin +)
     function soloNumero(telefono){
-      var tel = String(telefono||'').replace(/[^0-9+]/g,'');
+      var tel = String(telefono||'').replace(/[^0-9]/g,'');  // solo dígitos, sin +
+      if (!tel) return '';
+      // Buscar el indicativo más largo que coincida al inicio
+      var mejor = '';
       for (var p=0;p<PAISES_INDICATIVO.length;p++){
-        if (tel.indexOf(PAISES_INDICATIVO[p].c) === 0){ return tel.substring(PAISES_INDICATIVO[p].c.length); }
+        var dig = PAISES_INDICATIVO[p].c.replace('+','');
+        if (tel.indexOf(dig) === 0 && dig.length > mejor.length){ mejor = dig; }
       }
-      return tel.replace(/^\+/,'');
+      return mejor ? tel.substring(mejor.length) : tel;
     }
 
     function camposBoletos(cantidad){
