@@ -1635,6 +1635,42 @@
     }
     window.renderGeneradorBoletos = renderGeneradorBoletos;
 
+    // Lista de indicativos de países (LatAm + Europa + comunes)
+    var PAISES_INDICATIVO = [
+      {c:'+57', n:'🇨🇴 Colombia'}, {c:'+52', n:'🇲🇽 México'}, {c:'+54', n:'🇦🇷 Argentina'},
+      {c:'+56', n:'🇨🇱 Chile'}, {c:'+51', n:'🇵🇪 Perú'}, {c:'+58', n:'🇻🇪 Venezuela'},
+      {c:'+593', n:'🇪🇨 Ecuador'}, {c:'+591', n:'🇧🇴 Bolivia'}, {c:'+595', n:'🇵🇾 Paraguay'},
+      {c:'+598', n:'🇺🇾 Uruguay'}, {c:'+507', n:'🇵🇦 Panamá'}, {c:'+506', n:'🇨🇷 Costa Rica'},
+      {c:'+503', n:'🇸🇻 El Salvador'}, {c:'+502', n:'🇬🇹 Guatemala'}, {c:'+504', n:'🇭🇳 Honduras'},
+      {c:'+505', n:'🇳🇮 Nicaragua'}, {c:'+1', n:'🇺🇸 EE.UU./RD'}, {c:'+34', n:'🇪🇸 España'},
+      {c:'+39', n:'🇮🇹 Italia'}, {c:'+33', n:'🇫🇷 Francia'}, {c:'+49', n:'🇩🇪 Alemania'},
+      {c:'+44', n:'🇬🇧 Reino Unido'}, {c:'+351', n:'🇵🇹 Portugal'}
+    ];
+    // Indicativo por defecto según el grupo seleccionado
+    function indicativoPorGrupo(){
+      if (boletoGrupo === 'europa') return '+34';
+      return '+57';  // latam por defecto Colombia
+    }
+    // Detecta el indicativo a partir de un teléfono existente, o usa el del grupo
+    function indicativoOpts(telefono){
+      var tel = String(telefono||'');
+      var detectado = indicativoPorGrupo();
+      for (var p=0;p<PAISES_INDICATIVO.length;p++){
+        if (tel.replace(/[^0-9+]/g,'').indexOf(PAISES_INDICATIVO[p].c) === 0){ detectado = PAISES_INDICATIVO[p].c; break; }
+      }
+      return PAISES_INDICATIVO.map(function(p){
+        return '<option value="'+p.c+'"'+(p.c===detectado?' selected':'')+'>'+p.n+' ('+p.c+')</option>';
+      }).join('');
+    }
+    // Quita el indicativo del número para mostrar solo la parte local
+    function soloNumero(telefono){
+      var tel = String(telefono||'').replace(/[^0-9+]/g,'');
+      for (var p=0;p<PAISES_INDICATIVO.length;p++){
+        if (tel.indexOf(PAISES_INDICATIVO[p].c) === 0){ return tel.substring(PAISES_INDICATIVO[p].c.length); }
+      }
+      return tel.replace(/^\+/,'');
+    }
+
     function camposBoletos(cantidad){
       var out = '';
       for (var i=0;i<cantidad;i++){
@@ -1650,7 +1686,10 @@
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
             '<input class="bol-nombre" data-i="'+i+'" placeholder="Nombre *" value="' + escapeHtml(pre.nombre) + '" style="'+inp+'">' +
             '<input class="bol-apellido" data-i="'+i+'" placeholder="Apellido *" value="' + escapeHtml(pre.apellido) + '" style="'+inp+'">' +
-            '<input class="bol-telefono" data-i="'+i+'" placeholder="Teléfono (opcional)" value="' + escapeHtml(pre.telefono) + '" style="'+inp+'">' +
+            '<div style="display:flex;gap:6px;">' +
+              '<select class="bol-pais" data-i="'+i+'" style="width:108px;padding:9px 4px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);font-size:12px;">' + indicativoOpts(pre.telefono) + '</select>' +
+              '<input class="bol-telefono" data-i="'+i+'" placeholder="Teléfono" value="' + escapeHtml(soloNumero(pre.telefono)) + '" style="'+inp+'">' +
+            '</div>' +
             '<input class="bol-email" data-i="'+i+'" placeholder="Correo' + (esPrincipal?'':' (necesario para llamarlo)') + '" value="' + escapeHtml(pre.email) + '" style="'+inp+'">' +
           '</div>' +
         '</div>';
@@ -1665,7 +1704,9 @@
       for (var i=0;i<cantidad;i++){
         var nombre = document.querySelector('.bol-nombre[data-i="'+i+'"]').value.trim();
         var apellido = document.querySelector('.bol-apellido[data-i="'+i+'"]').value.trim();
-        var telefono = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.trim();
+        var indicativo = document.querySelector('.bol-pais[data-i="'+i+'"]').value;
+        var telLocal = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.replace(/[^0-9]/g,'');
+        var telefono = telLocal ? (indicativo + telLocal) : '';
         var email = document.querySelector('.bol-email[data-i="'+i+'"]').value.trim();
         var esVip = document.querySelector('.bol-vip[data-i="'+i+'"]').checked;
         if (!nombre || !apellido){ alert('Boleto ' + (i+1) + ': nombre y apellido son obligatorios'); return; }
