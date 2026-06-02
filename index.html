@@ -1712,7 +1712,13 @@
         var nombre = document.querySelector('.bol-nombre[data-i="'+i+'"]').value.trim();
         var apellido = document.querySelector('.bol-apellido[data-i="'+i+'"]').value.trim();
         var indicativo = document.querySelector('.bol-pais[data-i="'+i+'"]').value;
-        var telLocal = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.replace(/[^0-9]/g,'');
+        var telLocalRaw = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.replace(/[^0-9]/g,'');
+        // Evitar duplicar el indicativo: si el número local ya empieza con él, quitarlo
+        var indicDig = indicativo.replace('+','');
+        var telLocal = telLocalRaw;
+        if (telLocal.indexOf(indicDig) === 0 && telLocal.length > indicDig.length + 5){
+          telLocal = telLocal.substring(indicDig.length);
+        }
         var telefono = telLocal ? (indicativo + telLocal) : '';
         var email = document.querySelector('.bol-email[data-i="'+i+'"]').value.trim();
         var esVip = document.querySelector('.bol-vip[data-i="'+i+'"]').checked;
