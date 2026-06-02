@@ -561,6 +561,7 @@
         <div class="app-tabs">
           <button class="app-tab active" data-tab="dashboard">Dashboard</button>
           <button class="app-tab" data-tab="misleads">Mis Leads</button>
+          <button class="app-tab" data-tab="boletos">Boletos</button>
           <button class="app-tab" data-tab="comisiones">Comisiones</button>
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
@@ -595,6 +596,16 @@
         </div>
         <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Trabaja tus leads asignados. Al cerrar un lead, el sistema te asigna otro automáticamente (máximo 5 a la vez).</p>
         <div id="misleads-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
+      <!-- BOLETOS -->
+      <section id="tab-boletos" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Boletos</h2>
+          <button onclick="abrirGeneradorBoletos('', 'latam_bajo')" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Generar boletos</button>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Genera boletos VIP o gratuitos. Los VIP reciben link de pago según su grupo; los invitados entran como leads para llamarlos.</p>
+        <div id="boletos-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
       </section>
 
       <!-- COMISIONES -->
@@ -789,6 +800,14 @@
     <div class="modal" style="max-width:440px;">
       <button class="close" onclick="cerrarModalRango()">&times;</button>
       <div id="modal-rango-content"></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL BOLETOS ============ -->
+  <div id="modal-boletos" class="modal-overlay" onclick="if(event.target===this)cerrarModalBoletos()" style="display:none;">
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto;">
+      <button class="close" onclick="cerrarModalBoletos()">&times;</button>
+      <div id="modal-boletos-content"></div>
     </div>
   </div>
 
@@ -1049,6 +1068,7 @@
     function cargarTab(tab) {
       if (tab === 'dashboard') cargarDashboard();
       if (tab === 'misleads') cargarMisLeads();
+      if (tab === 'boletos') cargarBoletos();
       if (tab === 'comisiones') cargarComisiones();
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
@@ -1515,7 +1535,7 @@
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto +
             '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-phone-off"></i> No respondió</button>' +
-            '<button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-ticket"></i> Link de pago VIP</button>' +
+            '<button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-ticket"></i> Generar boleto</button>' +
           '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
             '<select id="estado-' + i + '" style="flex:1;min-width:180px;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + opcionesEstado + '</select>' +
@@ -1532,20 +1552,140 @@
     }
 
     window.compartirLinkVIP = function(leadEmail, grupo){
-      var plan = confirm('¿Es VIP para 2 personas? \n\nAceptar = VIP 2 personas\nCancelar = VIP 1 persona') ? 'vip_2' : 'vip_1';
-      apiPost('crm_link_pago_vip', { lead_email: leadEmail, plan: plan, grupo: grupo }).then(function(res){
-        if (!res.ok){ alert('Error: ' + (res.error||'')); return; }
-        // Mostrar opciones: copiar o WhatsApp
-        var wa = String(leadEmail||'').indexOf('@')>=0 ? '' : leadEmail;
-        var quiereWa = confirm('Link generado:\n\n' + res.url + '\n\nAceptar = enviar por WhatsApp\nCancelar = copiar al portapapeles');
-        if (quiereWa){
-          window.open('https://wa.me/?text=' + encodeURIComponent(res.mensaje_whatsapp), '_blank');
-        } else {
-          navigator.clipboard.writeText(res.url).then(function(){ alert('Link copiado al portapapeles'); })
-            .catch(function(){ prompt('Copia el link:', res.url); });
-        }
-      });
+      // Abre el generador de boletos con el lead precargado
+      abrirGeneradorBoletos(leadEmail, grupo);
     };
+
+    // ============ GENERADOR DE BOLETOS ============
+    var boletoLeadOrigen = '', boletoGrupo = '';
+
+    function cargarBoletos(){
+      $('boletos-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
+      apiPost('crm_boletos_listar', {}).then(function(res){
+        if (!res.ok){ $('boletos-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        var bs = res.data || [];
+        if (bs.length === 0){ $('boletos-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">Aún no has generado boletos.</div>'; return; }
+        var filas = bs.map(function(b){
+          var fecha = b.fecha ? new Date(b.fecha).toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) : '';
+          var tipoBadge = b.tipo==='vip'
+            ? '<span style="background:rgba(245,184,0,0.15);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">VIP</span>'
+            : '<span style="background:rgba(255,255,255,0.1);color:#9CA3AF;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">GRATUITO</span>';
+          var pagoBadge = b.estado_pago==='pagado'
+            ? '<span style="color:#34d399;font-size:11px;">Pagado</span>'
+            : (b.tipo==='vip' ? '<span style="color:#f59e0b;font-size:11px;">Pendiente pago</span>' : '<span style="color:#6B7280;font-size:11px;">—</span>');
+          return '<tr>' +
+            '<td style="padding:8px;font-weight:600;">' + escapeHtml(b.nombre) + (b.es_principal===true||b.es_principal==='true'?'':' <span style="font-size:10px;color:#6B7280;">(invitado de ' + escapeHtml(b.invitado_de||'') + ')</span>') + '</td>' +
+            '<td style="padding:8px;">' + tipoBadge + '</td>' +
+            '<td style="padding:8px;color:#9CA3AF;">' + (b.precio? '$'+b.precio+' '+escapeHtml(b.moneda||'') : '—') + '</td>' +
+            '<td style="padding:8px;">' + pagoBadge + '</td>' +
+            '<td style="padding:8px;color:#9CA3AF;">' + escapeHtml(b.grupo||'') + '</td>' +
+            '<td style="padding:8px;color:#6B7280;font-size:12px;">' + fecha + '</td>' +
+          '</tr>';
+        }).join('');
+        $('boletos-lista').innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">' +
+          '<thead><tr style="text-align:left;color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' +
+          '<th style="padding:8px;">Nombre</th><th style="padding:8px;">Tipo</th><th style="padding:8px;">Precio</th><th style="padding:8px;">Pago</th><th style="padding:8px;">Grupo</th><th style="padding:8px;">Fecha</th>' +
+          '</tr></thead><tbody>' + filas + '</tbody></table></div>';
+      }).catch(function(err){ $('boletos-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
+    }
+
+    window.abrirGeneradorBoletos = function(leadEmail, grupo){
+      boletoLeadOrigen = leadEmail || '';
+      boletoGrupo = grupo || 'latam_bajo';
+      renderGeneradorBoletos(1, leadEmail);
+      $('modal-boletos').style.display = 'flex';
+    };
+
+    window.cerrarModalBoletos = function(){ $('modal-boletos').style.display = 'none'; };
+
+    function renderGeneradorBoletos(cantidad, leadEmailPrincipal){
+      cantidad = Math.max(1, Math.min(19, cantidad || 1));
+      var grupos = [
+        { v:'latam_bajo', t:'Latam Bajo' },
+        { v:'latam_alto', t:'Latam Alto' },
+        { v:'europa', t:'Europa' }
+      ];
+      var grupoOpts = grupos.map(function(g){ return '<option value="'+g.v+'"'+(g.v===boletoGrupo?' selected':'')+'>'+g.t+'</option>'; }).join('');
+      var cantOpts = '';
+      for (var n=1;n<=19;n++) cantOpts += '<option value="'+n+'"'+(n===cantidad?' selected':'')+'>'+n+'</option>';
+
+      var html =
+        '<h2 style="margin:0 0 4px;font-size:22px;">Generar boletos</h2>' +
+        '<p style="color:#9CA3AF;font-size:13px;margin:0 0 18px;">El primer boleto es el principal. Los demás son invitados y entrarán como leads para llamarlos.</p>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
+          '<div style="flex:1;min-width:140px;"><label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">¿Cuántos boletos?</label>' +
+          '<select id="bol-cantidad" onchange="renderGeneradorBoletos(parseInt(this.value,10), null)" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);">' + cantOpts + '</select></div>' +
+          '<div style="flex:1;min-width:140px;"><label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Grupo (define precio VIP)</label>' +
+          '<select id="bol-grupo" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);">' + grupoOpts + '</select></div>' +
+        '</div>' +
+        '<div id="bol-campos">' + camposBoletos(cantidad, leadEmailPrincipal) + '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:18px;position:sticky;bottom:0;background:#0B1131;padding-top:12px;">' +
+          '<button onclick="enviarBoletos()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:15px;">Generar y obtener links de pago</button>' +
+          '<button onclick="cerrarModalBoletos()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:14px 20px;border-radius:8px;cursor:pointer;">Cancelar</button>' +
+        '</div>';
+      $('modal-boletos-content').innerHTML = html;
+    }
+    window.renderGeneradorBoletos = renderGeneradorBoletos;
+
+    function camposBoletos(cantidad, leadEmailPrincipal){
+      var out = '';
+      for (var i=0;i<cantidad;i++){
+        var esPrincipal = (i===0);
+        var inp = 'width:100%;padding:9px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;box-sizing:border-box;font-size:13px;';
+        out += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:12px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<span style="font-weight:700;color:#F5B800;">' + (esPrincipal?'Boleto principal':'Invitado '+i) + '</span>' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" class="bol-vip" data-i="'+i+'" checked> VIP (paga)</label>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<input class="bol-nombre" data-i="'+i+'" placeholder="Nombre *" style="'+inp+'">' +
+            '<input class="bol-apellido" data-i="'+i+'" placeholder="Apellido *" style="'+inp+'">' +
+            '<input class="bol-telefono" data-i="'+i+'" placeholder="Teléfono (opcional)" style="'+inp+'">' +
+            '<input class="bol-email" data-i="'+i+'" placeholder="Correo' + (esPrincipal?'':' (necesario para llamarlo)') + '" value="' + (esPrincipal&&leadEmailPrincipal?escapeHtml(leadEmailPrincipal):'') + '" style="'+inp+'">' +
+          '</div>' +
+        '</div>';
+      }
+      return out;
+    }
+
+    window.enviarBoletos = function(){
+      var cantidad = parseInt($('bol-cantidad').value,10);
+      var grupo = $('bol-grupo').value;
+      var boletos = [];
+      for (var i=0;i<cantidad;i++){
+        var nombre = document.querySelector('.bol-nombre[data-i="'+i+'"]').value.trim();
+        var apellido = document.querySelector('.bol-apellido[data-i="'+i+'"]').value.trim();
+        var telefono = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.trim();
+        var email = document.querySelector('.bol-email[data-i="'+i+'"]').value.trim();
+        var esVip = document.querySelector('.bol-vip[data-i="'+i+'"]').checked;
+        if (!nombre || !apellido){ alert('Boleto ' + (i+1) + ': nombre y apellido son obligatorios'); return; }
+        boletos.push({ nombre:nombre, apellido:apellido, telefono:telefono, email:email, tipo: esVip?'vip':'gratuito', es_principal: i===0 });
+      }
+      apiPost('crm_generar_boletos', { lead_email_origen: boletoLeadOrigen, grupo: grupo, boletos: boletos }).then(function(res){
+        if (!res.ok){ alert('Error: ' + (res.error||'')); return; }
+        mostrarResultadoBoletos(res.boletos);
+      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
+    };
+
+    function mostrarResultadoBoletos(boletos){
+      var html = '<h2 style="margin:0 0 16px;font-size:22px;">✓ Boletos generados</h2>';
+      boletos.forEach(function(b){
+        html += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:10px;">' +
+          '<div style="font-weight:700;">' + escapeHtml(b.nombre) + ' <span style="font-size:11px;color:' + (b.tipo==='vip'?'#F5B800':'#9CA3AF') + ';">' + (b.tipo==='vip'?'VIP':'GRATUITO') + '</span></div>';
+        if (b.tipo==='vip' && b.link_pago){
+          html += '<div style="font-size:12px;color:#9CA3AF;margin:6px 0;">Precio: $' + b.precio + ' ' + escapeHtml(b.moneda) + '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<button onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent(\'Aquí tienes tu acceso VIP: \'+' + JSON.stringify(JSON.stringify(b.link_pago)) + '),\'_blank\')" style="background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Enviar link por WhatsApp</button>' +
+              '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(JSON.stringify(b.link_pago)) + ').then(function(){this.textContent=\'Copiado\';}.bind(this))" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Copiar link</button>' +
+            '</div>';
+        } else {
+          html += '<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">Invitado gratuito · entrará como lead para llamarlo</div>';
+        }
+        html += '</div>';
+      });
+      html += '<button onclick="cerrarModalBoletos();cargarMisLeads();" style="width:100%;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:8px;">Listo</button>';
+      $('modal-boletos-content').innerHTML = html;
+    }
 
     window.marcarNoRespondio = function(leadEmail){
       apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){
