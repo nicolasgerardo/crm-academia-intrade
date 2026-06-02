@@ -702,19 +702,34 @@
       </section>
 
       <section id="tab-titanes" class="tab-content" style="display:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-          <h2 class="section-title" style="margin:0;">Titanes (vendedores)</h2>
-          <button onclick="nuevoTitan()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo Titán</button>
+        <h2 class="section-title" style="margin:0 0 6px;">Gestión de Titanes</h2>
+        <div style="background:linear-gradient(135deg,rgba(245,184,0,0.08),rgba(245,184,0,0.02));border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+          <p style="color:#E5E7EB;font-size:13.5px;line-height:1.6;margin:0;">Aquí administras tu equipo de ventas. En <b style="color:#F5B800;">Vendedores</b> creas y gestionas a cada Titán (sus accesos, foto y estado). En <b style="color:#F5B800;">Rangos</b> defines los niveles y cuánto gana cada uno por comisión. Asigna un rango a cada Titán desde su ficha.</p>
         </div>
-        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 20px;">Gestiona tu equipo de ventas. Cada Titán puede iniciar sesión con su correo y contraseña.</p>
-        <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:34px;border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;">
-          <h2 class="section-title" style="margin:0;">Rangos y comisiones</h2>
-          <button onclick="nuevoRango()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo rango</button>
+        <!-- Subpestañas -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+          <button class="subtab-btn active" data-subtab="vendedores" onclick="cambiarSubtab('vendedores')" style="background:none;border:none;border-bottom:2px solid #F5B800;color:#F5B800;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px;">Vendedores</button>
+          <button class="subtab-btn" data-subtab="rangos" onclick="cambiarSubtab('rangos')" style="background:none;border:none;border-bottom:2px solid transparent;color:#9CA3AF;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px;">Rangos</button>
         </div>
-        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 16px;">Define cuánto gana cada rango: % por evento, % por cierre de Intrader, y % para quien confirmó el lead.</p>
-        <div id="rangos-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+
+        <!-- Subpestaña Vendedores -->
+        <div id="subtab-vendedores">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <span style="color:#9CA3AF;font-size:13px;">Cada Titán inicia sesión con su correo y contraseña.</span>
+            <button onclick="nuevoTitan()" style="background:#F5B800;color:#0B1131;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo Titán</button>
+          </div>
+          <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+        </div>
+
+        <!-- Subpestaña Rangos -->
+        <div id="subtab-rangos" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <span style="color:#9CA3AF;font-size:13px;">% por evento, % por cierre de Intrader, y % para quien confirmó el lead.</span>
+            <button onclick="nuevoRango()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;">+ Nuevo rango</button>
+          </div>
+          <div id="rangos-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+        </div>
       </section>
 
       <section id="tab-cuenta" class="tab-content" style="display:none;">
@@ -993,7 +1008,7 @@
 
     // Muestra/oculta pestañas según el rol del usuario
     function aplicarRol() {
-      var soloAdmin = ['eventos', 'titanes', 'pagos'];  // pestañas exclusivas de admin
+      var soloAdmin = ['eventos', 'titanes', 'pagos', 'contactos'];  // pestañas exclusivas de admin
       document.querySelectorAll('.app-tab').forEach(function(btn){
         var tab = btn.dataset.tab;
         if (soloAdmin.indexOf(tab) >= 0) {
@@ -1048,7 +1063,7 @@
       if (userRol === 'titan') {
         $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
         apiPost('crm_metricas_titan', {}).then(function(res){
-          if (!res.ok) return;
+          if (!res.ok) { $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error</div><div class="extra">' + escapeHtml(res.error||'') + '</div></div>'; return; }
           var m = res.data;
           $('stats-grid').innerHTML =
             '<div class="stat-card"><div class="label">Mis leads asignados</div><div class="value gold">' + m.asignados + '</div><div class="extra">En esta campa&ntilde;a</div></div>' +
@@ -1059,12 +1074,15 @@
             '<div class="stat-card"><div class="label">No respondieron</div><div class="value">' + m.no_respondio + '</div><div class="extra">Reintentar</div></div>' +
             '<div class="stat-card"><div class="label">Mi comisi&oacute;n confirmada</div><div class="value gold">$' + m.comision_confirmada + '</div><div class="extra">Ganado</div></div>' +
             '<div class="stat-card"><div class="label">Comisi&oacute;n pendiente</div><div class="value">$' + m.comision_pendiente + '</div><div class="extra">Por confirmar pago</div></div>';
+        }).catch(function(err){
+          $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error de conexión</div><div class="extra">' + escapeHtml(String(err&&err.message?err.message:err)) + '</div></div>';
         });
         return;
       }
       // Admin: stats globales
+      $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
       apiGet('crm_stats').then(function(res){
-        if (!res.ok) return;
+        if (!res.ok) { $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error</div><div class="extra">' + escapeHtml(res.error||'') + '</div></div>'; return; }
         var s = res.data;
         var monedaTotal = s.ingresos_vip ? ('$' + s.ingresos_vip.toFixed(2) + ' USD') : '$0';
         var html =
@@ -1080,6 +1098,8 @@
             ((s.por_grupo && s.por_grupo.latam_bajo) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.latam_alto) || 0) + ' / ' + ((s.por_grupo && s.por_grupo.europa) || 0) +
             '</div><div class="extra">Latam-B / Latam-A / Europa</div></div>';
         $('stats-grid').innerHTML = html;
+      }).catch(function(err){
+        $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error de conexión</div><div class="extra">' + escapeHtml(String(err&&err.message?err.message:err)) + '</div></div>';
       });
     }
 
@@ -1606,36 +1626,58 @@
 
     // ============ TITANES (solo admin) ============
     var titanesCache = [];
+    window.cambiarSubtab = function(sub){
+      document.querySelectorAll('.subtab-btn').forEach(function(b){
+        var activo = b.dataset.subtab === sub;
+        b.style.color = activo ? '#F5B800' : '#9CA3AF';
+        b.style.borderBottomColor = activo ? '#F5B800' : 'transparent';
+      });
+      $('subtab-vendedores').style.display = (sub === 'vendedores') ? '' : 'none';
+      $('subtab-rangos').style.display = (sub === 'rangos') ? '' : 'none';
+    };
+
     function cargarTitanes() {
       cargarRangos();
       apiGet('crm_titanes_listar').then(function(res){
         if (!res.ok) { $('titanes-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         titanesCache = res.data || [];
         if (titanesCache.length === 0) {
-          $('titanes-lista').innerHTML = '<div style="color:#9CA3AF;">No hay Titanes aún. Crea el primero con "+ Nuevo Titán".</div>';
+          $('titanes-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay Titanes aún. Crea el primero con "+ Nuevo Titán".</div>';
           return;
         }
-        $('titanes-lista').innerHTML = titanesCache.map(function(t){
+        var filas = titanesCache.map(function(t){
           var inicial = (t.nombre || t.email || 'T').charAt(0).toUpperCase();
           var avatar = t.foto_url
-            ? '<img src="' + escapeHtml(t.foto_url) + '" style="width:42px;height:42px;border-radius:50%;object-fit:cover;">'
-            : '<div style="width:42px;height:42px;border-radius:50%;background:rgba(245,184,0,0.2);color:#F5B800;display:flex;align-items:center;justify-content:center;font-weight:700;">' + inicial + '</div>';
+            ? '<img src="' + escapeHtml(t.foto_url) + '" style="width:34px;height:34px;border-radius:50%;object-fit:cover;vertical-align:middle;">'
+            : '<span style="display:inline-flex;width:34px;height:34px;border-radius:50%;background:rgba(245,184,0,0.2);color:#F5B800;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;">' + inicial + '</span>';
           var estado = t.activo
             ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">ACTIVO</span>'
             : '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">DESHABILITADO</span>';
+          var rangoNombre = '—';
+          if (t.rango_id) {
+            var rg = rangosCache.filter(function(r){return r.rango_id===t.rango_id;})[0];
+            rangoNombre = rg ? escapeHtml(rg.nombre) : t.rango_id;
+          }
           var btnToggle = t.activo
-            ? '<button onclick="toggleTitan(\'' + t.titan_id + '\',false)" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Deshabilitar</button>'
-            : '<button onclick="toggleTitan(\'' + t.titan_id + '\',true)" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Habilitar</button>';
-          return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;' + (t.activo ? '' : 'opacity:0.6;') + '">' +
-            avatar +
-            '<div style="flex:1;min-width:0;"><div style="font-weight:700;">' + escapeHtml(t.nombre) + ' ' + estado + '</div>' +
-            '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(t.email) + '</div></div>' +
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-              '<button onclick="editarTitan(\'' + t.titan_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;">Editar</button>' +
+            ? '<button onclick="toggleTitan(\'' + t.titan_id + '\',false)" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Deshabilitar</button>'
+            : '<button onclick="toggleTitan(\'' + t.titan_id + '\',true)" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Habilitar</button>';
+          return '<tr style="' + (t.activo?'':'opacity:0.55;') + '">' +
+            '<td>' + avatar + '</td>' +
+            '<td style="font-weight:600;">' + escapeHtml(t.nombre) + '</td>' +
+            '<td style="color:#9CA3AF;">' + escapeHtml(t.email) + '</td>' +
+            '<td>' + rangoNombre + '</td>' +
+            '<td>' + estado + '</td>' +
+            '<td style="white-space:nowrap;"><div style="display:flex;gap:6px;">' +
+              '<button onclick="editarTitan(\'' + t.titan_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Editar</button>' +
               btnToggle +
-            '</div>' +
-          '</div>';
+            '</div></td>' +
+          '</tr>';
         }).join('');
+        $('titanes-lista').innerHTML =
+          '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">' +
+          '<thead><tr style="text-align:left;color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' +
+            '<th style="padding:8px;"></th><th style="padding:8px;">Nombre</th><th style="padding:8px;">Correo</th><th style="padding:8px;">Rango</th><th style="padding:8px;">Estado</th><th style="padding:8px;">Acciones</th>' +
+          '</tr></thead><tbody>' + filas + '</tbody></table></div>';
       });
     }
 
