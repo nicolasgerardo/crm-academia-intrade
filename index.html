@@ -583,6 +583,7 @@
       <!-- DASHBOARD -->
       <section id="tab-dashboard" class="tab-content">
         <h2 class="section-title">Resumen</h2>
+        <div id="modo-confirmador-banner"></div>
         <div class="stats-grid" id="stats-grid">
           <div class="stat-card"><div class="label">Cargando&hellip;</div></div>
         </div>
@@ -841,6 +842,7 @@
     var userNombre = null;
     var userFoto = null;
     var userRol = null;
+    var userModoConfirmador = false, userModoPuedeCambiar = true;
 
     // ============ HELPERS ============
     function $(id) { return document.getElementById(id); }
@@ -1078,10 +1080,37 @@
     }
 
     // ============ DASHBOARD ============
+    // Banner/switch de modo confirmador para el Titán
+    function renderSwitchModo(){
+      var cont = $('modo-confirmador-banner');
+      if (!cont) return;
+      if (userRol !== 'titan'){ cont.innerHTML = ''; return; }
+      var activo = userModoConfirmador;
+      var puede = userModoPuedeCambiar;
+      var estadoTxt = activo ? 'ACTIVO' : 'INACTIVO';
+      var color = activo ? '#34d399' : '#9CA3AF';
+      var btn = puede
+        ? '<button onclick="toggleMiModo(' + (!activo) + ')" style="background:' + (activo?'rgba(248,113,113,0.15)':'rgba(52,211,153,0.15)') + ';color:' + (activo?'#f87171':'#34d399') + ';border:1px solid ' + (activo?'rgba(248,113,113,0.3)':'rgba(52,211,153,0.3)') + ';padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">' + (activo?'Desactivar':'Activar') + ' modo confirmador</button>'
+        : '<span style="font-size:12px;color:#9CA3AF;">El administrador fijó este modo.</span>';
+      cont.innerHTML = '<div style="background:rgba(245,184,0,0.06);border:1px solid rgba(245,184,0,0.2);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+        '<div><span style="font-weight:700;">Modo confirmador: <span style="color:' + color + ';">' + estadoTxt + '</span></span>' +
+        '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Activado, además de cerrar puedes confirmar leads del webinar.</div></div>' +
+        btn + '</div>';
+    }
+
+    window.toggleMiModo = function(activar){
+      apiPost('crm_titan_cambiar_modo', { activar: activar }).then(function(res){
+        if (res.ok){ userModoConfirmador = res.modo; renderSwitchModo(); }
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
     function cargarDashboard() {
       // El Titán ve SOLO sus métricas personales, no la base completa
       if (userRol === 'titan') {
         $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
+        // Banner de modo confirmador (switch propio del titán)
+        renderSwitchModo();
         apiPost('crm_metricas_titan', {}).then(function(res){
           if (!res.ok) { $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error</div><div class="extra">' + escapeHtml(res.error||'') + '</div></div>'; return; }
           var m = res.data;
@@ -1892,6 +1921,13 @@
             var rg = rangosCache.filter(function(r){return r.rango_id===t.rango_id;})[0];
             rangoNombre = rg ? escapeHtml(rg.nombre) : t.rango_id;
           }
+          // Control de modo confirmador (el admin manda con el select de bloqueo)
+          var bloq = t.bloqueo_admin || '';
+          var modoSel = '<select onchange="fijarModoTitan(\'' + t.titan_id + '\', this.value)" style="padding:4px 6px;border-radius:6px;font-size:11px;border:1px solid rgba(255,255,255,0.15);">' +
+            '<option value=""' + (bloq===''?' selected':'') + '>Titán decide' + (t.modo_confirmador?' (ON)':' (OFF)') + '</option>' +
+            '<option value="on"' + (bloq==='on'?' selected':'') + '>Forzar ON</option>' +
+            '<option value="off"' + (bloq==='off'?' selected':'') + '>Forzar OFF</option>' +
+          '</select>';
           var btnToggle = t.activo
             ? '<button onclick="toggleTitan(\'' + t.titan_id + '\',false)" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Deshabilitar</button>'
             : '<button onclick="toggleTitan(\'' + t.titan_id + '\',true)" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Habilitar</button>';
@@ -1900,6 +1936,7 @@
             '<td style="font-weight:600;">' + escapeHtml(t.nombre) + '</td>' +
             '<td style="color:#9CA3AF;">' + escapeHtml(t.email) + '</td>' +
             '<td>' + rangoNombre + '</td>' +
+            '<td>' + modoSel + '</td>' +
             '<td>' + estado + '</td>' +
             '<td style="white-space:nowrap;"><div style="display:flex;gap:6px;">' +
               '<button onclick="editarTitan(\'' + t.titan_id + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Editar</button>' +
@@ -1910,7 +1947,7 @@
         $('titanes-lista').innerHTML =
           '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">' +
           '<thead><tr style="text-align:left;color:#9CA3AF;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' +
-            '<th style="padding:8px;"></th><th style="padding:8px;">Nombre</th><th style="padding:8px;">Correo</th><th style="padding:8px;">Rango</th><th style="padding:8px;">Estado</th><th style="padding:8px;">Acciones</th>' +
+            '<th style="padding:8px;"></th><th style="padding:8px;">Nombre</th><th style="padding:8px;">Correo</th><th style="padding:8px;">Rango</th><th style="padding:8px;">Modo confirmador</th><th style="padding:8px;">Estado</th><th style="padding:8px;">Acciones</th>' +
           '</tr></thead><tbody>' + filas + '</tbody></table></div>';
       });
     }
@@ -1983,6 +2020,13 @@
       var accion = activar ? 'habilitar' : 'deshabilitar';
       if (!confirm('¿Seguro que quieres ' + accion + ' este Titán?')) return;
       apiPost('crm_titan_toggle', { titan_id: id, activar: activar }).then(function(res){
+        if (res.ok) cargarTitanes();
+        else alert('Error: ' + (res.error||''));
+      });
+    };
+
+    window.fijarModoTitan = function(titanId, bloqueo){
+      apiPost('crm_admin_fijar_modo', { titan_id: titanId, bloqueo: bloqueo }).then(function(res){
         if (res.ok) cargarTitanes();
         else alert('Error: ' + (res.error||''));
       });
@@ -2186,6 +2230,8 @@
         apiGet('crm_sesion_actual').then(function(res){
           if (res && res.ok) {
             userRol = res.rol || userRol;
+            userModoConfirmador = !!res.modo_confirmador;
+            userModoPuedeCambiar = res.modo_puede_cambiar !== false;
             mostrarApp();
           } else {
             logout();
