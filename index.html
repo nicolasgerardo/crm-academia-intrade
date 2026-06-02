@@ -1420,8 +1420,8 @@
       misLeadsCache.map(function(L, i){
         var nombre = (L.nombre || '') + ' ' + (L.apellido || '');
         nombre = nombre.trim() || L.lead_email;
-        var tel = L.telefono || L.whatsapp || '';
-        var wa = (L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
+        var tel = String(L.telefono || L.whatsapp || '');
+        var wa = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
 
         // Badge de estado actual
         var estadoColor = '#9CA3AF';
