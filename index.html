@@ -1044,6 +1044,25 @@
 
     // ============ DASHBOARD ============
     function cargarDashboard() {
+      // El Titán ve SOLO sus métricas personales, no la base completa
+      if (userRol === 'titan') {
+        $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
+        apiPost('crm_metricas_titan', {}).then(function(res){
+          if (!res.ok) return;
+          var m = res.data;
+          $('stats-grid').innerHTML =
+            '<div class="stat-card"><div class="label">Mis leads asignados</div><div class="value gold">' + m.asignados + '</div><div class="extra">En esta campa&ntilde;a</div></div>' +
+            '<div class="stat-card"><div class="label">Activos por trabajar</div><div class="value">' + m.activos + '</div><div class="extra">Sin cerrar</div></div>' +
+            '<div class="stat-card"><div class="label">Confirmados</div><div class="value gold">' + m.confirmados + '</div><div class="extra">Asistir&aacute;n</div></div>' +
+            '<div class="stat-card"><div class="label">Cierres VIP</div><div class="value gold">' + m.cierres_vip + '</div><div class="extra">Vendidos por m&iacute;</div></div>' +
+            '<div class="stat-card"><div class="label">Tasa de conversi&oacute;n</div><div class="value">' + m.tasa_conversion + '%</div><div class="extra">VIP / asignados</div></div>' +
+            '<div class="stat-card"><div class="label">No respondieron</div><div class="value">' + m.no_respondio + '</div><div class="extra">Reintentar</div></div>' +
+            '<div class="stat-card"><div class="label">Mi comisi&oacute;n confirmada</div><div class="value gold">$' + m.comision_confirmada + '</div><div class="extra">Ganado</div></div>' +
+            '<div class="stat-card"><div class="label">Comisi&oacute;n pendiente</div><div class="value">$' + m.comision_pendiente + '</div><div class="extra">Por confirmar pago</div></div>';
+        });
+        return;
+      }
+      // Admin: stats globales
       apiGet('crm_stats').then(function(res){
         if (!res.ok) return;
         var s = res.data;
@@ -1476,6 +1495,7 @@
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto +
             '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-phone-off"></i> No respondió</button>' +
+            '<button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-ticket"></i> Link de pago VIP</button>' +
           '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
             '<select id="estado-' + i + '" style="flex:1;min-width:180px;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + opcionesEstado + '</select>' +
@@ -1490,6 +1510,22 @@
         if (sel) sel.value = L.estado;
       });
     }
+
+    window.compartirLinkVIP = function(leadEmail, grupo){
+      var plan = confirm('¿Es VIP para 2 personas? \n\nAceptar = VIP 2 personas\nCancelar = VIP 1 persona') ? 'vip_2' : 'vip_1';
+      apiPost('crm_link_pago_vip', { lead_email: leadEmail, plan: plan, grupo: grupo }).then(function(res){
+        if (!res.ok){ alert('Error: ' + (res.error||'')); return; }
+        // Mostrar opciones: copiar o WhatsApp
+        var wa = String(leadEmail||'').indexOf('@')>=0 ? '' : leadEmail;
+        var quiereWa = confirm('Link generado:\n\n' + res.url + '\n\nAceptar = enviar por WhatsApp\nCancelar = copiar al portapapeles');
+        if (quiereWa){
+          window.open('https://wa.me/?text=' + encodeURIComponent(res.mensaje_whatsapp), '_blank');
+        } else {
+          navigator.clipboard.writeText(res.url).then(function(){ alert('Link copiado al portapapeles'); })
+            .catch(function(){ prompt('Copia el link:', res.url); });
+        }
+      });
+    };
 
     window.marcarNoRespondio = function(leadEmail){
       apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){
