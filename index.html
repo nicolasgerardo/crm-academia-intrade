@@ -14,8 +14,6 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { min-height: 100vh; }
-    /* Fix global: selects y sus opciones con fondo oscuro y texto claro
-       (evita el problema de texto blanco sobre fondo blanco en los desplegables) */
     select {
       background-color: #14102b;
       color: #ffffff;
@@ -36,7 +34,6 @@
       background: radial-gradient(ellipse at top, #1A1F3D 0%, #050010 70%);
     }
 
-    /* ============ LOGIN ============ */
     .login-wrap {
       min-height: 100vh;
       display: flex;
@@ -147,7 +144,6 @@
     }
     .login-error.show { display: block; }
 
-    /* ============ APP (post-login) ============ */
     .app { display: none; min-height: 100vh; }
     .app.show { display: block; }
 
@@ -229,7 +225,6 @@
       padding: 28px 20px;
     }
 
-    /* ============ DASHBOARD STATS ============ */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -282,7 +277,6 @@
       font-weight: 700;
     }
 
-    /* ============ TABLAS ============ */
     .table-controls {
       display: flex;
       gap: 8px;
@@ -371,7 +365,6 @@
       font-size: 14px;
     }
 
-    /* ============ EVENTOS ============ */
     .eventos-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -418,9 +411,7 @@
       padding-top: 14px;
       border-top: 1px solid rgba(255,255,255,0.08);
     }
-    .evento-card .stat-mini {
-      flex: 1;
-    }
+    .evento-card .stat-mini { flex: 1; }
     .evento-card .stat-mini .num {
       font-size: 24px;
       font-weight: 900;
@@ -435,7 +426,6 @@
       font-weight: 700;
     }
 
-    /* ============ MODAL DETALLE ============ */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -471,9 +461,7 @@
       font-size: 18px;
     }
     .modal .close:hover { color: #fff; border-color: #FF6B6B; }
-    .detail-section {
-      margin-bottom: 18px;
-    }
+    .detail-section { margin-bottom: 18px; }
     .detail-section h3 {
       font-size: 12px;
       font-weight: 700;
@@ -501,7 +489,6 @@
       word-break: break-word;
     }
 
-    /* ============ MOBILE ============ */
     @media (max-width: 768px) {
       .app-nav-inner { flex-wrap: wrap; gap: 10px; }
       .app-tabs { order: 3; width: 100%; }
@@ -562,6 +549,7 @@
           <button class="app-tab active" data-tab="dashboard">Dashboard</button>
           <button class="app-tab" data-tab="misleads">Mis Leads</button>
           <button class="app-tab" data-tab="boletos">Boletos</button>
+          <button class="app-tab" data-tab="confirmacion">Confirmación</button>
           <button class="app-tab" data-tab="comisiones">Comisiones</button>
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
@@ -594,7 +582,7 @@
       <section id="tab-misleads" class="tab-content" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
           <h2 class="section-title" style="margin:0;">Mis Leads <span class="badge" id="misleads-count">0</span></h2>
-          <button onclick="cargarMisLeads()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-refresh"></i> Actualizar</button>
+          <button onclick="cargarMisLeads()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar</button>
         </div>
         <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Trabaja tus leads asignados. Al cerrar un lead, el sistema te asigna otro automáticamente (máximo 5 a la vez).</p>
         <div id="misleads-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
@@ -608,6 +596,45 @@
         </div>
         <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Genera boletos VIP o gratuitos. Los VIP reciben link de pago según su grupo; los invitados entran como leads para llamarlos.</p>
         <div id="boletos-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
+      </section>
+
+      <!-- CONFIRMACIÓN WEBINAR -->
+      <section id="tab-confirmacion" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Confirmación <span class="badge" id="conf-count">0</span></h2>
+          <div style="display:flex;gap:8px;">
+            <button onclick="cargarConfirmacion()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar</button>
+          </div>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Confirma asistencia de inscritos. Los prospectos aparecen clasificados por engagement (apertura de emails). Envía WhatsApp personalizado y marca confirmación.</p>
+
+        <!-- Resumen de engagement -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;" id="conf-resumen"></div>
+
+        <!-- Filtros -->
+        <div class="table-controls">
+          <input type="text" id="conf-busqueda" placeholder="Buscar por nombre, email o teléfono…" oninput="filtrarConfirmacion()">
+          <select id="conf-filtro-engagement" onchange="filtrarConfirmacion()">
+            <option value="">Todos los niveles</option>
+            <option value="frio">🔴 Fríos (prioridad)</option>
+            <option value="pendiente">🟡 Pendientes</option>
+            <option value="activo">🟢 Activos</option>
+          </select>
+          <select id="conf-filtro-grupo" onchange="filtrarConfirmacion()">
+            <option value="">Todos los grupos</option>
+            <option value="latam_bajo">Latam Bajo</option>
+            <option value="latam_alto">Latam Alto</option>
+            <option value="europa">Europa</option>
+          </select>
+          <select id="conf-filtro-estado" onchange="filtrarConfirmacion()">
+            <option value="">Todos los estados</option>
+            <option value="sin_confirmar">Sin confirmar</option>
+            <option value="confirmado">Confirmados</option>
+            <option value="no_asistira">No asistirá</option>
+          </select>
+        </div>
+
+        <div id="conf-lista"><div style="color:#9CA3AF;">Cargando…</div></div>
       </section>
 
       <!-- COMISIONES -->
@@ -752,13 +779,11 @@
           <p style="color:#E5E7EB;font-size:13.5px;line-height:1.6;margin:0;">Aquí administras tu equipo de ventas. En <b style="color:#F5B800;">Vendedores</b> creas y gestionas a cada Titán (sus accesos, foto y estado). En <b style="color:#F5B800;">Rangos</b> defines los niveles y cuánto gana cada uno por comisión. Asigna un rango a cada Titán desde su ficha.</p>
         </div>
 
-        <!-- Subpestañas -->
         <div style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.08);">
           <button class="subtab-btn active" data-subtab="vendedores" onclick="cambiarSubtab('vendedores')" style="background:none;border:none;border-bottom:2px solid #F5B800;color:#F5B800;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px;">Vendedores</button>
           <button class="subtab-btn" data-subtab="rangos" onclick="cambiarSubtab('rangos')" style="background:none;border:none;border-bottom:2px solid transparent;color:#9CA3AF;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px;">Rangos</button>
         </div>
 
-        <!-- Subpestaña Vendedores -->
         <div id="subtab-vendedores">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
             <span style="color:#9CA3AF;font-size:13px;">Cada Titán inicia sesión con su correo y contraseña.</span>
@@ -767,7 +792,6 @@
           <div id="titanes-lista"><div style="color:#9CA3AF;">Cargando&hellip;</div></div>
         </div>
 
-        <!-- Subpestaña Rangos -->
         <div id="subtab-rangos" style="display:none;">
           <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:12px;padding:16px 18px;margin-bottom:18px;">
             <h3 style="margin:0 0 10px;font-size:14px;color:#60a5fa;">Campañas por modo</h3>
@@ -792,7 +816,6 @@
       <section id="tab-cuenta" class="tab-content" style="display:none;">
         <h2 class="section-title">Mi cuenta</h2>
         <div style="max-width:520px;">
-          <!-- Perfil -->
           <div class="perfil-admin-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
             <h3 style="margin:0 0 14px;font-size:15px;">Datos del perfil</h3>
             <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre</label>
@@ -803,7 +826,6 @@
             <span id="perfil-msg" style="margin-left:12px;font-size:13px;"></span>
           </div>
 
-          <!-- Cambiar contraseña -->
           <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:16px;">
             <h3 style="margin:0 0 14px;font-size:15px;">Cambiar contraseña</h3>
             <label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Contraseña actual</label>
@@ -814,7 +836,6 @@
             <span id="pass-msg" style="margin-left:12px;font-size:13px;"></span>
           </div>
 
-          <!-- Estado Google OAuth -->
           <div class="oauth-card" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;">
             <h3 style="margin:0 0 8px;font-size:15px;">Inicio de sesión con Google</h3>
             <p id="oauth-estado" style="margin:0;font-size:13px;color:#9CA3AF;">Verificando&hellip;</p>
@@ -871,9 +892,6 @@
 
     // ============ CONFIG ============
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK6XSxi1T4I2hCSZeEScJy7pKhFGs2S1OVtxSmAfc2oFjK1UonFmIGFjGEmJAdTymQ8g/exec';
-
-    // Google OAuth Client ID (necesitas crear uno en Google Cloud Console)
-    // Por ahora va vacío, configurar después. Sin esto, solo funcionará el login por password.
     var GOOGLE_CLIENT_ID = '1017716219810-5bu75fnjf54m0o6euauhgdl2rorb12oo.apps.googleusercontent.com';
 
     var STORAGE_KEY = 'crm_token';
@@ -934,10 +952,7 @@
       return fetch(APPS_SCRIPT_URL + '?' + qs.join('&'))
         .then(function(r){ return r.json(); })
         .then(function(res){
-          if (res && res.code === 'AUTH_REQUIRED') {
-            logout();
-            throw new Error('Sesión expirada');
-          }
+          if (res && res.code === 'AUTH_REQUIRED') { logout(); throw new Error('Sesión expirada'); }
           return res;
         });
     }
@@ -952,10 +967,7 @@
       })
         .then(function(r){ return r.json(); })
         .then(function(res){
-          if (res && res.code === 'AUTH_REQUIRED') {
-            logout();
-            throw new Error('Sesión expirada');
-          }
+          if (res && res.code === 'AUTH_REQUIRED') { logout(); throw new Error('Sesión expirada'); }
           return res;
         });
     }
@@ -1010,10 +1022,7 @@
     window.handleGoogleSignIn = function(response) {
       apiPost('crm_login_google', { id_token: response.credential })
         .then(function(res){
-          if (!res.ok) {
-            mostrarErrorLogin(res.error || 'Acceso denegado');
-            return;
-          }
+          if (!res.ok) { mostrarErrorLogin(res.error || 'Acceso denegado'); return; }
           token = res.token;
           userEmail = res.email;
           userNombre = res.nombre || '';
@@ -1026,40 +1035,23 @@
           if (userFoto) localStorage.setItem(STORAGE_FOTO, userFoto);
           mostrarApp();
         })
-        .catch(function(){
-          mostrarErrorLogin('Error de conexión con Google');
-        });
+        .catch(function(){ mostrarErrorLogin('Error de conexión con Google'); });
     };
 
     function initGoogleSignIn() {
       if (!GOOGLE_CLIENT_ID) {
-        $('google-signin-btn').innerHTML =
-          '<p style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;">' +
-          'Google Sign-In no configurado a&uacute;n.</p>';
+        $('google-signin-btn').innerHTML = '<p style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;">Google Sign-In no configurado a&uacute;n.</p>';
         return;
       }
-      if (typeof google === 'undefined' || !google.accounts) {
-        setTimeout(initGoogleSignIn, 300);
-        return;
-      }
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleSignIn
-      });
-      google.accounts.id.renderButton($('google-signin-btn'), {
-        theme: 'filled_black',
-        size: 'large',
-        text: 'signin_with',
-        shape: 'rectangular',
-        width: 320
-      });
+      if (typeof google === 'undefined' || !google.accounts) { setTimeout(initGoogleSignIn, 300); return; }
+      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleSignIn });
+      google.accounts.id.renderButton($('google-signin-btn'), { theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'rectangular', width: 320 });
     }
 
     // ============ APP ============
     function mostrarApp() {
       hide($('login-screen'));
       $('app').classList.add('show');
-      // Avatar
       $('user-email').textContent = userEmail;
       var avatar = $('user-avatar');
       if (userFoto) {
@@ -1068,20 +1060,17 @@
         avatar.textContent = (userEmail || 'U').charAt(0).toUpperCase();
       }
       aplicarRol();
-      // Cargar dashboard inicial
       cargarTab('dashboard');
     }
 
-    // Muestra/oculta pestañas según el rol del usuario
     function aplicarRol() {
-      var soloAdmin = ['eventos', 'titanes', 'pagos', 'contactos', 'metricas'];  // pestañas exclusivas de admin
+      var soloAdmin = ['eventos', 'titanes', 'pagos', 'contactos', 'metricas'];
       document.querySelectorAll('.app-tab').forEach(function(btn){
         var tab = btn.dataset.tab;
         if (soloAdmin.indexOf(tab) >= 0) {
           btn.style.display = (userRol === 'admin') ? '' : 'none';
         }
       });
-      // Etiqueta de rol junto al email
       var badge = $('user-rol-badge');
       if (badge) {
         badge.textContent = userRol === 'admin' ? 'Administrador' : 'Titán';
@@ -1093,9 +1082,7 @@
       [STORAGE_KEY, STORAGE_EMAIL, STORAGE_NOMBRE, STORAGE_FOTO, STORAGE_ROL].forEach(function(k){
         localStorage.removeItem(k); sessionStorage.removeItem(k);
       });
-      token = null;
-      userEmail = null;
-      userRol = null;
+      token = null; userEmail = null; userRol = null;
       location.reload();
     }
     $('btn-logout').addEventListener('click', logout);
@@ -1116,6 +1103,7 @@
       if (tab === 'dashboard') cargarDashboard();
       if (tab === 'misleads') cargarMisLeads();
       if (tab === 'boletos') cargarBoletos();
+      if (tab === 'confirmacion') cargarConfirmacion();
       if (tab === 'comisiones') cargarComisiones();
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
@@ -1126,7 +1114,6 @@
     }
 
     // ============ DASHBOARD ============
-    // Banner/switch de modo confirmador para el Titán
     function renderSwitchModo(){
       var cont = $('modo-confirmador-banner');
       if (!cont) return;
@@ -1152,10 +1139,8 @@
     };
 
     function cargarDashboard() {
-      // El Titán ve SOLO sus métricas personales, no la base completa
       if (userRol === 'titan') {
         $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
-        // Banner de modo confirmador (switch propio del titán)
         renderSwitchModo();
         apiPost('crm_metricas_titan', {}).then(function(res){
           if (!res.ok) { $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error</div><div class="extra">' + escapeHtml(res.error||'') + '</div></div>'; return; }
@@ -1174,7 +1159,6 @@
         });
         return;
       }
-      // Admin: stats globales
       $('stats-grid').innerHTML = '<div class="stat-card"><div class="label">Cargando&hellip;</div></div>';
       apiGet('crm_stats').then(function(res){
         if (!res.ok) { $('stats-grid').innerHTML = '<div class="stat-card"><div class="label" style="color:#f87171;">Error</div><div class="extra">' + escapeHtml(res.error||'') + '</div></div>'; return; }
@@ -1201,7 +1185,6 @@
     // ============ CONTACTOS ============
     var contactosTimer = null;
 
-    // Mapeo país (texto) → código ISO 2 letras para banderas
     var PAIS_CODIGO = {
       'colombia':'co','mexico':'mx','méxico':'mx','peru':'pe','perú':'pe',
       'argentina':'ar','chile':'cl','ecuador':'ec','venezuela':'ve','bolivia':'bo',
@@ -1217,7 +1200,6 @@
       var p = String(paisTxt || '').toLowerCase().trim();
       if (!p) return '';
       if (PAIS_CODIGO[p]) return PAIS_CODIGO[p];
-      // Si ya es código de 2 letras
       if (p.length === 2) return p;
       return '';
     }
@@ -1276,10 +1258,7 @@
 
     // ============ PAGOS ============
     function cargarPagos() {
-      var params = {
-        estado: $('filtro-estado').value,
-        modo: $('filtro-modo').value
-      };
+      var params = { estado: $('filtro-estado').value, modo: $('filtro-modo').value };
       apiGet('crm_pagos', params).then(function(res){
         if (!res.ok) return;
         var rows = res.data.rows;
@@ -1354,9 +1333,7 @@
       });
     }
 
-    window.nuevoEvento = function() {
-      abrirModalEvento(null);
-    };
+    window.nuevoEvento = function() { abrirModalEvento(null); };
     window.editarEvento = function(id) {
       var ev = eventosCache.filter(function(e){ return e.evento_id === id; })[0];
       abrirModalEvento(ev);
@@ -1377,7 +1354,6 @@
 
       var sectoresHtml = GRUPOS_EVENTO.map(function(g){
         var s = ev.sectores[g.key] || {};
-        // separar fecha_iso en datetime-local + tz
         var dtLocal = '', tzVal = (g.key === 'europa' ? '+02:00' : '-05:00');
         if (s.fecha_iso) {
           var m = s.fecha_iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?([+-]\d{2}:\d{2})?$/);
@@ -1442,33 +1418,24 @@
         '<input data-grupo="' + grupo + '" data-campo="' + campo + '" value="' + escapeHtml(String(valor)) + '" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;"></div>';
     }
 
-    window.cerrarModalEvento = function() {
-      $('modal-evento').style.display = 'none';
-    };
+    window.cerrarModalEvento = function() { $('modal-evento').style.display = 'none'; };
 
     window.guardarEvento = function() {
       var sectores = {};
       GRUPOS_EVENTO.forEach(function(g){ sectores[g.key] = {}; });
       var inputs = $('modal-evento-content').querySelectorAll('input[data-grupo], select[data-grupo]');
-      var temp = {};  // acumula _dtlocal y _tz por grupo
+      var temp = {};
       inputs.forEach(function(inp){
         var g = inp.getAttribute('data-grupo');
         var c = inp.getAttribute('data-campo');
         var val = inp.value.trim();
-        if (c === '_dtlocal' || c === '_tz') {
-          temp[g] = temp[g] || {};
-          temp[g][c] = val;
-          return;
-        }
+        if (c === '_dtlocal' || c === '_tz') { temp[g] = temp[g] || {}; temp[g][c] = val; return; }
         if (c === 'precio_vip1' || c === 'precio_vip2') val = parseFloat(val) || 0;
         sectores[g][c] = val;
       });
-      // Componer fecha_iso = datetime-local + ":00" + tz
       GRUPOS_EVENTO.forEach(function(g){
         var t = temp[g.key];
-        if (t && t._dtlocal) {
-          sectores[g.key].fecha_iso = t._dtlocal + ':00' + (t._tz || '-05:00');
-        }
+        if (t && t._dtlocal) { sectores[g.key].fecha_iso = t._dtlocal + ':00' + (t._tz || '-05:00'); }
       });
 
       var evento = {
@@ -1482,17 +1449,13 @@
       if (!evento.nombre_campania) evento.nombre_campania = evento.nombre_evento;
 
       apiPost('crm_evento_guardar', { evento: evento }).then(function(res){
-        if (res.ok) {
-          cerrarModalEvento();
-          cargarEventos();
-        } else {
-          alert('Error: ' + (res.error || 'no se pudo guardar'));
-        }
+        if (res.ok) { cerrarModalEvento(); cargarEventos(); }
+        else { alert('Error: ' + (res.error || 'no se pudo guardar')); }
       });
     };
 
     window.desactivarEvento = function(id) {
-      if (!confirm('¿Desactivar este evento? El link seguirá existiendo pero dejará de promocionarse y no aparecerá como activo.')) return;
+      if (!confirm('¿Desactivar este evento?')) return;
       apiPost('crm_evento_eliminar', { evento_id: id }).then(function(res){
         if (res.ok) { cargarEventos(); }
         else { alert('Error: ' + (res.error || 'no se pudo desactivar')); }
@@ -1503,19 +1466,16 @@
       navigator.clipboard.writeText(url).then(function(){
         var t = btn.textContent; btn.textContent = '¡Copiado!';
         setTimeout(function(){ btn.textContent = t; }, 1500);
-      }).catch(function(){
-        prompt('Copia el enlace:', url);
-      });
+      }).catch(function(){ prompt('Copia el enlace:', url); });
     };
 
-    // Autocompleta el texto que ve el lead a partir del datetime + zona horaria
     window.actualizarDisplayFecha = function(grupoKey) {
       var cont = $('modal-evento-content');
       var dtInput = cont.querySelector('input[data-grupo="' + grupoKey + '"][data-campo="_dtlocal"]');
       var tzInput = cont.querySelector('select[data-grupo="' + grupoKey + '"][data-campo="_tz"]');
       if (!dtInput || !dtInput.value) return;
 
-      var partes = dtInput.value.split('T');  // ["2026-06-18","20:00"]
+      var partes = dtInput.value.split('T');
       var fecha = partes[0], hora = partes[1] || '00:00';
       var d = new Date(fecha + 'T' + hora + ':00');
 
@@ -1523,13 +1483,11 @@
       var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
       var fechaTxt = dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()];
 
-      // Hora en formato 12h
       var h = d.getHours(), min = d.getMinutes();
       var ampm = h >= 12 ? 'PM' : 'AM';
       var h12 = h % 12; if (h12 === 0) h12 = 12;
       var horaTxt = h12 + ':' + (min < 10 ? '0' + min : min) + ' ' + ampm;
 
-      // Etiqueta de zona horaria legible
       var tzLabels = { '-05:00':'hora Colombia', '-06:00':'hora México', '-03:00':'hora Argentina', '+02:00':'hora Europa Central', '+01:00':'hora España', '-04:00':'hora Venezuela' };
       var tzTxt = tzInput && tzLabels[tzInput.value] ? ' (' + tzLabels[tzInput.value] + ')' : '';
 
@@ -1546,7 +1504,6 @@
 
     function cargarMisLeads() {
       $('misleads-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
-      // Primero cargar los estados disponibles (una vez)
       var pasoEstados = LEAD_ESTADOS_CACHE
         ? Promise.resolve({ ok: true, data: LEAD_ESTADOS_CACHE })
         : apiGet('crm_leads_estados');
@@ -1558,7 +1515,6 @@
         misLeadsCache = res.data || [];
         misLeadsCampania = res.campania_nombre || res.campania_id || '';
         $('misleads-count').textContent = misLeadsCache.length;
-        // Aviso de fallback / modo de trabajo
         var avisoHtml = '';
         if (res.aviso){
           avisoHtml = '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f59e0b;font-size:13px;">⚠ ' + escapeHtml(res.aviso) + '</div>';
@@ -1570,7 +1526,7 @@
         $('misleads-lista').setAttribute('data-aviso', avisoHtml);
         renderMisLeads(res.max || 5, avisoHtml);
       }).catch(function(err){
-        $('misleads-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err && err.message ? err.message : err)) + '<br><span style="color:#9CA3AF;font-size:12px;">Intenta de nuevo con el botón Actualizar.</span></div>';
+        $('misleads-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err && err.message ? err.message : err)) + '</div>';
       });
     }
 
@@ -1583,7 +1539,7 @@
     function renderMisLeads(max, avisoHtml){
       avisoHtml = avisoHtml || '';
       if (misLeadsCache.length === 0){
-        $('misleads-lista').innerHTML = avisoHtml + '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento. <br>Puede que no haya leads disponibles en el pool.</div>';
+        $('misleads-lista').innerHTML = avisoHtml + '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:30px;text-align:center;color:#9CA3AF;">No tienes leads asignados en este momento.</div>';
         return;
       }
       var opcionesEstado = (LEAD_ESTADOS_CACHE||[]).map(function(e){
@@ -1597,7 +1553,6 @@
         var tel = String(L.telefono || L.whatsapp || '');
         var wa = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
 
-        // Badge de estado actual
         var estadoColor = '#9CA3AF';
         if (L.estado === 'no_contactado') estadoColor = '#60a5fa';
         else if (L.estado === 'no_respondio') estadoColor = '#f59e0b';
@@ -1609,21 +1564,21 @@
           : '';
 
         var botonesContacto = '';
-        if (wa) botonesContacto += '<a href="https://wa.me/' + wa + '" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-brand-whatsapp"></i> WhatsApp</a>';
-        if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;"><i class="ti ti-phone"></i> Llamar</a>';
+        if (wa) botonesContacto += '<a href="https://wa.me/' + wa + '" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">WhatsApp</a>';
+        if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Llamar</a>';
 
         return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">' +
             '<div>' +
               '<div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div>' +
               '<div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' +
-              (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + (misLeadsCampania ? ' · Campaña: ' + escapeHtml(misLeadsCampania) : '') + '</div>' : (misLeadsCampania ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Campaña: ' + escapeHtml(misLeadsCampania) + '</div>' : '')) +
+              (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + (misLeadsCampania ? ' · Campaña: ' + escapeHtml(misLeadsCampania) : '') + '</div>' : '') +
             '</div>' +
             '<span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span>' +
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto +
-            '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-phone-off"></i> No respondió</button>' +
-            '<button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;"><i class="ti ti-ticket"></i> Generar boleto</button>' +
+            '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">No respondió</button>' +
+            '<button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Generar boleto</button>' +
           '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
             '<select id="estado-' + i + '" style="flex:1;min-width:180px;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + opcionesEstado + '</select>' +
@@ -1632,7 +1587,6 @@
         '</div>';
       }).join('');
 
-      // Preseleccionar el estado actual en cada select
       misLeadsCache.forEach(function(L, i){
         var sel = $('estado-' + i);
         if (sel) sel.value = L.estado;
@@ -1640,7 +1594,6 @@
     }
 
     window.compartirLinkVIP = function(leadEmail, grupo){
-      // Recuperar los datos completos del lead desde el cache
       var lead = (misLeadsCache || []).filter(function(l){ return String(l.lead_email)===String(leadEmail); })[0];
       abrirGeneradorBoletos(leadEmail, grupo, lead);
     };
@@ -1681,7 +1634,6 @@
     window.abrirGeneradorBoletos = function(leadEmail, grupo, lead){
       boletoLeadOrigen = leadEmail || '';
       boletoGrupo = grupo || 'latam_bajo';
-      // Datos del lead principal para precargar (si vino desde Mis Leads)
       boletoLeadDatos = lead ? {
         nombre: lead.nombre || '',
         apellido: lead.apellido || '',
@@ -1723,7 +1675,6 @@
     }
     window.renderGeneradorBoletos = renderGeneradorBoletos;
 
-    // Lista de indicativos de países (LatAm + Europa + comunes)
     var PAISES_INDICATIVO = [
       {c:'+57', n:'🇨🇴 Colombia'}, {c:'+52', n:'🇲🇽 México'}, {c:'+54', n:'🇦🇷 Argentina'},
       {c:'+56', n:'🇨🇱 Chile'}, {c:'+51', n:'🇵🇪 Perú'}, {c:'+58', n:'🇻🇪 Venezuela'},
@@ -1734,16 +1685,10 @@
       {c:'+39', n:'🇮🇹 Italia'}, {c:'+33', n:'🇫🇷 Francia'}, {c:'+49', n:'🇩🇪 Alemania'},
       {c:'+44', n:'🇬🇧 Reino Unido'}, {c:'+351', n:'🇵🇹 Portugal'}
     ];
-    // Indicativo por defecto según el grupo seleccionado
-    function indicativoPorGrupo(){
-      if (boletoGrupo === 'europa') return '+34';
-      return '+57';  // latam por defecto Colombia
-    }
-    // Detecta el indicativo a partir de un teléfono existente, o usa el del grupo
+    function indicativoPorGrupo(){ return boletoGrupo === 'europa' ? '+34' : '+57'; }
     function indicativoOpts(telefono){
-      var tel = String(telefono||'').replace(/[^0-9]/g,'');  // solo dígitos
+      var tel = String(telefono||'').replace(/[^0-9]/g,'');
       var detectado = indicativoPorGrupo();
-      // Buscar el indicativo más largo que coincida (para no confundir +57 con +571)
       var mejor = '';
       for (var p=0;p<PAISES_INDICATIVO.length;p++){
         var dig = PAISES_INDICATIVO[p].c.replace('+','');
@@ -1753,11 +1698,9 @@
         return '<option value="'+p.c+'"'+(p.c===detectado?' selected':'')+'>'+p.n+' ('+p.c+')</option>';
       }).join('');
     }
-    // Quita el indicativo del número para mostrar solo la parte local (con o sin +)
     function soloNumero(telefono){
-      var tel = String(telefono||'').replace(/[^0-9]/g,'');  // solo dígitos, sin +
+      var tel = String(telefono||'').replace(/[^0-9]/g,'');
       if (!tel) return '';
-      // Buscar el indicativo más largo que coincida al inicio
       var mejor = '';
       for (var p=0;p<PAISES_INDICATIVO.length;p++){
         var dig = PAISES_INDICATIVO[p].c.replace('+','');
@@ -1770,7 +1713,6 @@
       var out = '';
       for (var i=0;i<cantidad;i++){
         var esPrincipal = (i===0);
-        // Precargar datos del lead solo en el principal
         var pre = (esPrincipal && boletoLeadDatos) ? boletoLeadDatos : { nombre:'', apellido:'', telefono:'', email:'' };
         var inp = 'width:100%;padding:9px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;box-sizing:border-box;font-size:13px;';
         out += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:12px;">' +
@@ -1801,12 +1743,9 @@
         var apellido = document.querySelector('.bol-apellido[data-i="'+i+'"]').value.trim();
         var indicativo = document.querySelector('.bol-pais[data-i="'+i+'"]').value;
         var telLocalRaw = document.querySelector('.bol-telefono[data-i="'+i+'"]').value.replace(/[^0-9]/g,'');
-        // Evitar duplicar el indicativo: si el número local ya empieza con él, quitarlo
         var indicDig = indicativo.replace('+','');
         var telLocal = telLocalRaw;
-        if (telLocal.indexOf(indicDig) === 0 && telLocal.length > indicDig.length + 5){
-          telLocal = telLocal.substring(indicDig.length);
-        }
+        if (telLocal.indexOf(indicDig) === 0 && telLocal.length > indicDig.length + 5){ telLocal = telLocal.substring(indicDig.length); }
         var telefono = telLocal ? (indicativo + telLocal) : '';
         var email = document.querySelector('.bol-email[data-i="'+i+'"]').value.trim();
         var esVip = document.querySelector('.bol-vip[data-i="'+i+'"]').checked;
@@ -1815,13 +1754,11 @@
       }
       apiPost('crm_generar_boletos', { lead_email_origen: boletoLeadOrigen, grupo: grupo, boletos: boletos }).then(function(res){
         if (!res.ok){ alert('Error: ' + (res.error||'')); return; }
-        // Adjuntar teléfono capturado a cada resultado (para WhatsApp)
         res.boletos.forEach(function(rb, k){ if (boletos[k]) rb.telefono = boletos[k].telefono; });
         mostrarResultadoBoletos(res.boletos);
       }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
     };
 
-    // Guarda los links para que los botones (con listeners) los usen
     var boletosResultado = [];
 
     function mostrarResultadoBoletos(boletos){
@@ -1844,17 +1781,13 @@
       html += '<button onclick="cerrarModalBoletos();cargarMisLeads();" style="width:100%;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:8px;">Listo</button>';
       $('modal-boletos-content').innerHTML = html;
 
-      // Conectar listeners reales (evita problemas de escape en onclick)
       document.querySelectorAll('.btn-wa-boleto').forEach(function(btn){
         btn.addEventListener('click', function(){
           var b = boletosResultado[parseInt(btn.dataset.k,10)];
           var primerNombre = (b.nombre || '').split(' ')[0];
-          var msg = '¡Hola ' + primerNombre + '! 🎉 Aquí tienes tu acceso para asegurar tu cupo VIP al evento. ' +
-            'Solo entra a este enlace y completa tu registro: ' + b.link_pago + '\n\n¡Nos vemos adentro!';
+          var msg = '¡Hola ' + primerNombre + '! 🎉 Aquí tienes tu acceso para asegurar tu cupo VIP al evento. Solo entra a este enlace y completa tu registro: ' + b.link_pago + '\n\n¡Nos vemos adentro!';
           var tel = String(b.telefono || '').replace(/[^0-9]/g,'');
-          var url = tel
-            ? 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg)
-            : 'https://wa.me/?text=' + encodeURIComponent(msg);
+          var url = tel ? 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
           window.open(url, '_blank');
         });
       });
@@ -1887,13 +1820,149 @@
         if (dq === null) return;
         extra.acompanante_de = dq;
       }
-      if (nuevoEstado === 'no_respondio'){
-        // usar el flujo con contador
-        return window.marcarNoRespondio(leadEmail);
-      }
+      if (nuevoEstado === 'no_respondio'){ return window.marcarNoRespondio(leadEmail); }
       apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: nuevoEstado }, extra)).then(function(res){
         if (res.ok){ cargarMisLeads(); }
         else { alert('Error: ' + (res.error||'')); }
+      });
+    };
+
+    // ============ CONFIRMACIÓN WEBINAR ============
+    var confCache = [];
+
+    function cargarConfirmacion() {
+      $('conf-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
+      apiGet('crm_engagement_inscritos', {}).then(function(res){
+        if (!res.ok) { $('conf-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        confCache = res.data.rows || [];
+        $('conf-count').textContent = confCache.length;
+        var act = 0, pend = 0, frio = 0, conf = 0;
+        confCache.forEach(function(c){
+          if (c.engagement === 'activo') act++;
+          else if (c.engagement === 'frio') frio++;
+          else pend++;
+          if (c.confirmacion === 'confirmado') conf++;
+        });
+        $('conf-resumen').innerHTML =
+          tarjetaResumen('🟢 Activos', act, '#34d399') +
+          tarjetaResumen('🟡 Pendientes', pend, '#f59e0b') +
+          tarjetaResumen('🔴 Fríos', frio, '#f87171') +
+          tarjetaResumen('✅ Confirmados', conf, '#F5B800');
+        filtrarConfirmacion();
+      }).catch(function(err){
+        $('conf-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>';
+      });
+    }
+
+    window.filtrarConfirmacion = function() {
+      var q = ($('conf-busqueda').value || '').toLowerCase().trim();
+      var eng = $('conf-filtro-engagement').value;
+      var grupo = $('conf-filtro-grupo').value;
+      var estado = $('conf-filtro-estado').value;
+
+      var filtrados = confCache.filter(function(c){
+        if (q && (c.email + ' ' + c.nombre + ' ' + c.apellido + ' ' + c.telefono).toLowerCase().indexOf(q) < 0) return false;
+        if (eng && c.engagement !== eng) return false;
+        if (grupo && c.grupo !== grupo) return false;
+        if (estado === 'sin_confirmar' && c.confirmacion !== 'sin_confirmar') return false;
+        if (estado === 'confirmado' && c.confirmacion !== 'confirmado') return false;
+        if (estado === 'no_asistira' && c.confirmacion !== 'no_asistira') return false;
+        return true;
+      });
+
+      if (filtrados.length === 0) {
+        $('conf-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay inscritos que coincidan con los filtros.</div>';
+        return;
+      }
+
+      $('conf-lista').innerHTML = filtrados.map(function(c, i){
+        var nombre = ((c.nombre || '') + ' ' + (c.apellido || '')).trim() || c.email;
+        var engBadge = c.engagement === 'activo'
+          ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🟢 ACTIVO</span>'
+          : (c.engagement === 'frio'
+            ? '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🔴 FRÍO</span>'
+            : '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🟡 PENDIENTE</span>');
+
+        var confBadge = '';
+        if (c.confirmacion === 'confirmado') confBadge = ' <span style="background:rgba(245,184,0,0.15);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">✅ CONFIRMADO</span>';
+        else if (c.confirmacion === 'no_asistira') confBadge = ' <span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">NO ASISTIRÁ</span>';
+        else if (c.confirmacion === 'vip_cerrado') confBadge = ' <span style="background:rgba(245,184,0,0.25);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">⭐ VIP CERRADO</span>';
+
+        var emailInfo = c.emails_abiertos > 0
+          ? '<span style="color:#34d399;font-size:11px;">📧 ' + c.emails_abiertos + ' abierto(s)' + (c.emails_clicks > 0 ? ' · ' + c.emails_clicks + ' clic(s)' : '') + '</span>'
+          : '<span style="color:#f87171;font-size:11px;">📧 Sin abrir</span>';
+
+        var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
+
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + '</div>' +
+              '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div>' +
+              '<div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div>' +
+            '</div>' +
+            '<div>' + engBadge + '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+            (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') +
+            (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') +
+            '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button>' +
+            '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button>' +
+            '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button>' +
+            '<button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    };
+
+    window.confWhatsApp = function(email, nombre, telefono, engagement) {
+      apiPost('crm_whatsapp_confirmar', {
+        email: email,
+        nombre: nombre,
+        telefono: telefono,
+        engagement: engagement,
+        titan_nombre: userNombre || userEmail
+      }).then(function(res){
+        if (res.ok && res.link) {
+          window.open(res.link, '_blank');
+        } else {
+          alert('Error: ' + (res.error || 'No se pudo generar el link'));
+        }
+      });
+    };
+
+    window.confMarcar = function(email, estado) {
+      var notas = '';
+      if (estado === 'no_asistira') {
+        notas = prompt('¿Razón? (opcional)') || '';
+      }
+      apiPost('crm_marcar_confirmacion', {
+        email: email,
+        estado: estado,
+        notas: notas
+      }).then(function(res){
+        if (res.ok) {
+          cargarConfirmacion();
+        } else {
+          alert('Error: ' + (res.error || ''));
+        }
+      });
+    };
+
+    window.confReferido = function(email) {
+      var referido = prompt('Nombre y teléfono del referido:');
+      if (!referido) return;
+      apiPost('crm_marcar_confirmacion', {
+        email: email,
+        estado: 'confirmado',
+        referido: referido
+      }).then(function(res){
+        if (res.ok) {
+          alert('¡Referido registrado! Se notificó por Telegram.');
+          cargarConfirmacion();
+        } else {
+          alert('Error: ' + (res.error || ''));
+        }
       });
     };
 
@@ -1904,7 +1973,6 @@
       apiPost('crm_comisiones_listar', {}).then(function(res){
         if (!res.ok){ $('comisiones-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         var cs = res.data || [];
-        // Resumen
         $('comisiones-resumen').innerHTML =
           tarjetaResumen('Confirmadas', '$' + (res.total_calculada||0), '#34d399') +
           tarjetaResumen('Pendientes de pago', '$' + (res.total_pendiente||0), '#f59e0b');
@@ -2012,7 +2080,6 @@
 
     // ============ TITANES (solo admin) ============
     var titanesCache = [];
-    var eventosCache = [];
     window.cambiarSubtab = function(sub){
       document.querySelectorAll('.subtab-btn').forEach(function(b){
         var activo = b.dataset.subtab === sub;
@@ -2025,13 +2092,12 @@
 
     function cargarTitanes() {
       cargarRangos();
-      // Cargar eventos para el selector de campaña individual
       apiGet('crm_eventos_listar').then(function(re){ if (re && re.ok) eventosCache = re.data || []; });
       apiGet('crm_titanes_listar').then(function(res){
         if (!res.ok) { $('titanes-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         titanesCache = res.data || [];
         if (titanesCache.length === 0) {
-          $('titanes-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay Titanes aún. Crea el primero con "+ Nuevo Titán".</div>';
+          $('titanes-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay Titanes aún.</div>';
           return;
         }
         var filas = titanesCache.map(function(t){
@@ -2047,7 +2113,6 @@
             var rg = rangosCache.filter(function(r){return r.rango_id===t.rango_id;})[0];
             rangoNombre = rg ? escapeHtml(rg.nombre) : t.rango_id;
           }
-          // Control de modo confirmador (el admin manda con el select de bloqueo)
           var bloq = t.bloqueo_admin || '';
           var modoSel = '<select onchange="fijarModoTitan(\'' + t.titan_id + '\', this.value)" style="padding:4px 6px;border-radius:6px;font-size:11px;border:1px solid rgba(255,255,255,0.15);">' +
             '<option value=""' + (bloq===''?' selected':'') + '>Titán decide' + (t.modo_confirmador?' (ON)':' (OFF)') + '</option>' +
@@ -2135,27 +2200,21 @@
       apiPost('crm_titan_guardar', { titan: titan }).then(function(res){
         if (res.ok) {
           var tid = res.titan_id || titan.titan_id;
-          // Encadenar: rango -> campaña individual -> cerrar
           var paso2 = function(){
             apiPost('crm_asignar_campania_titan', { titan_id: tid, campania_id: campSel }).then(function(){
               cerrarModalTitan(); cargarTitanes();
             });
           };
-          if (tid && rangoSel) {
-            apiPost('crm_asignar_rango', { titan_id: tid, rango_id: rangoSel }).then(paso2);
-          } else if (tid) {
-            paso2();
-          } else {
-            cerrarModalTitan(); cargarTitanes();
-          }
+          if (tid && rangoSel) { apiPost('crm_asignar_rango', { titan_id: tid, rango_id: rangoSel }).then(paso2); }
+          else if (tid) { paso2(); }
+          else { cerrarModalTitan(); cargarTitanes(); }
         }
         else { alert('Error: ' + (res.error||'')); }
       });
     };
 
     window.toggleTitan = function(id, activar){
-      var accion = activar ? 'habilitar' : 'deshabilitar';
-      if (!confirm('¿Seguro que quieres ' + accion + ' este Titán?')) return;
+      if (!confirm('¿Seguro que quieres ' + (activar?'habilitar':'deshabilitar') + ' este Titán?')) return;
       apiPost('crm_titan_toggle', { titan_id: id, activar: activar }).then(function(res){
         if (res.ok) cargarTitanes();
         else alert('Error: ' + (res.error||''));
@@ -2176,10 +2235,7 @@
       apiGet('crm_rangos_listar').then(function(res){
         if (!res.ok) { $('rangos-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         rangosCache = res.data || [];
-        if (rangosCache.length === 0) {
-          $('rangos-lista').innerHTML = '<div style="color:#9CA3AF;">No hay rangos. Crea el primero.</div>';
-          return;
-        }
+        if (rangosCache.length === 0) { $('rangos-lista').innerHTML = '<div style="color:#9CA3AF;">No hay rangos. Crea el primero.</div>'; return; }
         $('rangos-lista').innerHTML = rangosCache.map(function(r){
           return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
             '<div><span style="font-weight:700;">' + escapeHtml(r.nombre) + '</span> <span style="font-size:11px;color:#6B7280;">nivel ' + r.orden + '</span>' +
@@ -2195,7 +2251,6 @@
 
     window.nuevoRango = function(){ abrirModalRango(null); };
 
-    // Cargar las campañas (eventos) en los selectores de modo
     function cargarCampanasModo(){
       apiGet('crm_eventos_listar').then(function(resEv){
         var eventos = (resEv && resEv.ok) ? (resEv.data || []) : [];
@@ -2278,13 +2333,12 @@
     };
 
     function cargarCuenta() {
-      // Los Titanes no ven el perfil de admin ni el OAuth: solo cambian su contraseña
       var perfilCard = document.querySelector('#tab-cuenta .perfil-admin-card');
       var oauthCard = document.querySelector('#tab-cuenta .oauth-card');
       if (userRol === 'titan') {
         if (perfilCard) perfilCard.style.display = 'none';
         if (oauthCard) oauthCard.style.display = 'none';
-        return;  // no llamamos crm_perfil_obtener (es de admin)
+        return;
       }
       if (perfilCard) perfilCard.style.display = '';
       if (oauthCard) oauthCard.style.display = '';
@@ -2293,20 +2347,16 @@
         var d = res.data;
         $('perfil-nombre').value = d.nombre || '';
         $('perfil-email-rec').value = d.email_recuperacion || '';
-        // El Client ID vive en el frontend (constante GOOGLE_CLIENT_ID)
         var activo = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.indexOf('apps.googleusercontent.com') >= 0);
         $('oauth-estado').textContent = activo
           ? '✓ Google OAuth está activo. Puedes iniciar sesión con tu cuenta de Google.'
-          : 'Google OAuth no está configurado. Pega tu Client ID en la constante GOOGLE_CLIENT_ID del código.';
+          : 'Google OAuth no está configurado.';
         $('oauth-estado').style.color = activo ? '#34d399' : '#9CA3AF';
       });
     }
 
     window.guardarPerfil = function() {
-      var datos = {
-        nombre: $('perfil-nombre').value.trim(),
-        email_recuperacion: $('perfil-email-rec').value.trim()
-      };
+      var datos = { nombre: $('perfil-nombre').value.trim(), email_recuperacion: $('perfil-email-rec').value.trim() };
       $('perfil-msg').textContent = 'Guardando…';
       apiPost('crm_perfil_guardar', { datos: datos }).then(function(res){
         $('perfil-msg').textContent = res.ok ? '✓ Guardado' : ('Error: ' + (res.error||''));
@@ -2320,7 +2370,6 @@
       var nueva = $('pass-nueva').value;
       if (nueva.length < 8) { $('pass-msg').textContent='Mín. 8 caracteres'; $('pass-msg').style.color='#f87171'; return; }
       $('pass-msg').textContent = 'Cambiando…';
-      // Admin y Titán usan endpoints distintos
       var endpoint = (userRol === 'titan') ? 'crm_titan_cambiar_password' : 'crm_cambiar_password';
       apiPost(endpoint, { password_vieja: vieja, password_nueva: nueva }).then(function(res){
         $('pass-msg').textContent = res.ok ? '✓ Contraseña cambiada' : ('Error: ' + (res.error||''));
@@ -2329,7 +2378,6 @@
         setTimeout(function(){ $('pass-msg').textContent=''; }, 4000);
       });
     };
-
 
     // ============ MODAL DETALLE CONTACTO ============
     window.abrirDetalleContacto = function(email) {
@@ -2350,43 +2398,28 @@
         $('modal-content').innerHTML =
           '<h2 style="font-family:Montserrat,sans-serif;font-size:22px;margin-bottom:6px;">' + escapeHtml((c.nombre || '') + ' ' + (c.apellido || '')) + '</h2>' +
           '<p style="color:rgba(255,255,255,0.6);font-size:13px;margin-bottom:24px;">' + escapeHtml(c.email) + '</p>' +
-          '<div class="detail-section">' +
-            '<h3>Informaci&oacute;n personal</h3>' +
-            '<div class="detail-grid">' +
-              '<div class="item"><div class="lbl">Tel&eacute;fono</div><div class="val">' + escapeHtml(c.telefono || '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Pa&iacute;s</div><div class="val">' + escapeHtml(c.pais || '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Sexo</div><div class="val">' + (c.sexo === 'M' ? 'Hombre' : c.sexo === 'F' ? 'Mujer' : '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Fecha de registro</div><div class="val">' + formatFecha(c.fecha_registro) + '</div></div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="detail-section">' +
-            '<h3>Evento</h3>' +
-            '<div class="detail-grid">' +
-              '<div class="item"><div class="lbl">Grupo</div><div class="val">' + escapeHtml(c.grupo_evento || '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Fecha del evento</div><div class="val">' + escapeHtml(c.fecha_evento || '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Ticket ID</div><div class="val" style="font-family:monospace;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</div></div>' +
-              '<div class="item"><div class="lbl">Estado</div><div class="val">' + escapeHtml(c.estado || '-') + '</div></div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="detail-section">' +
-            '<h3>Etiquetas</h3>' +
-            '<div style="color:rgba(255,255,255,0.7);font-size:13px;">' + escapeHtml(c.etiquetas || 'Sin etiquetas') + '</div>' +
-          '</div>' +
-          '<div class="detail-section">' +
-            '<h3>Pagos VIP (' + pagos.length + ')</h3>' +
-            pagosHtml +
-          '</div>';
+          '<div class="detail-section"><h3>Informaci&oacute;n personal</h3><div class="detail-grid">' +
+            '<div class="item"><div class="lbl">Tel&eacute;fono</div><div class="val">' + escapeHtml(c.telefono || '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Pa&iacute;s</div><div class="val">' + escapeHtml(c.pais || '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Sexo</div><div class="val">' + (c.sexo === 'M' ? 'Hombre' : c.sexo === 'F' ? 'Mujer' : '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Fecha de registro</div><div class="val">' + formatFecha(c.fecha_registro) + '</div></div>' +
+          '</div></div>' +
+          '<div class="detail-section"><h3>Evento</h3><div class="detail-grid">' +
+            '<div class="item"><div class="lbl">Grupo</div><div class="val">' + escapeHtml(c.grupo_evento || '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Fecha del evento</div><div class="val">' + escapeHtml(c.fecha_evento || '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Ticket ID</div><div class="val" style="font-family:monospace;color:#FFC832;">' + escapeHtml(c.ticket_id || '-') + '</div></div>' +
+            '<div class="item"><div class="lbl">Estado</div><div class="val">' + escapeHtml(c.estado || '-') + '</div></div>' +
+          '</div></div>' +
+          '<div class="detail-section"><h3>Etiquetas</h3><div style="color:rgba(255,255,255,0.7);font-size:13px;">' + escapeHtml(c.etiquetas || 'Sin etiquetas') + '</div></div>' +
+          '<div class="detail-section"><h3>Pagos VIP (' + pagos.length + ')</h3>' + pagosHtml + '</div>';
         $('modal-detalle').classList.add('show');
       });
     };
 
-    window.cerrarModal = function() {
-      $('modal-detalle').classList.remove('show');
-    };
+    window.cerrarModal = function() { $('modal-detalle').classList.remove('show'); };
 
     // ============ INICIALIZACIÓN ============
     function init() {
-      // Restaurar sesión si existe
       token = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
       userEmail = localStorage.getItem(STORAGE_EMAIL) || sessionStorage.getItem(STORAGE_EMAIL);
       userNombre = localStorage.getItem(STORAGE_NOMBRE) || '';
@@ -2394,19 +2427,14 @@
       userRol = localStorage.getItem(STORAGE_ROL) || sessionStorage.getItem(STORAGE_ROL) || 'admin';
 
       if (token && userEmail) {
-        // Verificar token y refrescar el rol desde el backend
         apiGet('crm_sesion_actual').then(function(res){
           if (res && res.ok) {
             userRol = res.rol || userRol;
             userModoConfirmador = !!res.modo_confirmador;
             userModoPuedeCambiar = res.modo_puede_cambiar !== false;
             mostrarApp();
-          } else {
-            logout();
-          }
-        }).catch(function(){
-          logout();
-        });
+          } else { logout(); }
+        }).catch(function(){ logout(); });
       }
 
       initGoogleSignIn();
