@@ -1904,7 +1904,7 @@
             '<div>' + engBadge + '</div>' +
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
-            (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') +
+            (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') +
             (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') +
             '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button>' +
             '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button>' +
@@ -1915,13 +1915,14 @@
       }).join('');
     };
 
-    window.confWhatsApp = function(email, nombre, telefono, engagement) {
+    window.confWhatsApp = function(email, nombre, telefono, engagement, sexo) {
       apiPost('crm_whatsapp_confirmar', {
         email: email,
         nombre: nombre,
         telefono: telefono,
         engagement: engagement,
-        titan_nombre: userNombre || userEmail
+        sexo: sexo || '',
+        titan_nombre: userNombre || ''
       }).then(function(res){
         if (res.ok && res.link) {
           window.open(res.link, '_blank');
