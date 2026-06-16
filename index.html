@@ -746,27 +746,118 @@
       var leadDatos = { nombre: nombre || '', apellido: apellido || '', telefono: telefono || '', whatsapp: telefono || '', lead_email: email };
       abrirGeneradorBoletos(email, grupo || 'latam_bajo', leadDatos);
     };
-    window.exportarWAPI = function() {
-      if (confCache.length === 0) { alert('No hay contactos cargados. Primero ve a la pestaña Confirmación.'); return; }
-      var exportables = confCache.filter(function(c) { var tel = String(c.telefono || '').replace(/[^0-9]/g, ''); return tel.length >= 8 && c.confirmacion !== 'confirmado' && c.confirmacion !== 'no_asistira'; });
-      if (exportables.length === 0) { alert('No hay contactos pendientes con teléfono válido para exportar.'); return; }
-      var esNicolas = !userNombre || userNombre.toLowerCase().indexOf('nicolas') >= 0 || userNombre.toLowerCase().indexOf('nicolás') >= 0;
-      var LIMITE_LOTE = 50; var lote = exportables.slice(0, LIMITE_LOTE); var filas = [['telefono', 'mensaje']];
-      lote.forEach(function(c) {
-        var tel = String(c.telefono || '').replace(/[^0-9]/g, ''); var primerNombre = String(c.nombre || '').split(' ')[0]; primerNombre = primerNombre.charAt(0).toUpperCase() + primerNombre.slice(1).toLowerCase();
-        var sexo = String(c.sexo || '').toUpperCase(); var preparado = (sexo === 'F') ? 'preparada' : 'preparado';
-        var firma, rolTxt;
-        if (esNicolas) { firma = 'Soy Nicolas, te escribo personalmente de Money Magnet.'; rolTxt = 'Voy a ser tu punto de contacto antes y durante el evento.'; } else { firma = 'Soy ' + (userNombre || 'tu asesor') + ', Director de Experiencias de Money Magnet, del equipo de Nicolas Cuellar.'; rolTxt = 'Mi funcion es que tu experiencia en el evento sea increible.'; }
-        var mensaje;
-        if (c.engagement === 'activo') { mensaje = 'Hola ' + primerNombre + '\n\n' + firma + '\n\n' + 'Vi que te registraste en Money Magnet y me da mucho gusto. ' + rolTxt + '\n\n' + 'Tengo unas recomendaciones importantes para que llegues ' + preparado + ' y aproveches cada minuto del evento. ' + 'Son las reglas del juego del dinero que nadie te ensena, y en 2 horas vas a entender por que tu dinero no crece como deberia.\n\n' + 'Me gustaria hacerte una llamada rapida de 5 minutos para conocerte y que llegues con todo listo. ' + 'Tienes un espacio esta semana?'; }
-        else if (c.engagement === 'frio') { mensaje = 'Hola ' + primerNombre + '\n\n' + firma + ' ' + rolTxt + '\n\n' + 'Te escribo porque te registraste en Money Magnet y quiero que sepas lo que te espera:\n\n' + 'En 2 horas en vivo vas a descubrir las reglas del juego del dinero, ' + 'por que el dinero que ganas nunca llega a multiplicarse, y que hacen diferente quienes si logran que su capital trabaje para ellos.\n\n' + 'Tengo unas recomendaciones para que aproveches el evento al maximo. ' + 'Tienes un espacio para una llamada rapida?'; }
-        else { mensaje = 'Hola ' + primerNombre + '\n\n' + firma + '\n\n' + 'Me da gusto que te hayas registrado en Money Magnet. ' + rolTxt + '\n\n' + 'Quiero asegurarme de que recibiste toda la informacion del evento. ' + 'A veces los correos caen en spam y no quiero que te pierdas nada.\n\n' + 'Ademas tengo unas recomendaciones importantes para que llegues ' + preparado + ' y aproveches cada minuto. ' + 'Tienes un espacio para una llamada rapida esta semana?'; }
-        mensaje = mensaje.replace(/"/g, '""'); filas.push([tel, '"' + mensaje + '"']);
-      });
-      var csv = filas.map(function(f) { return f.join(','); }).join('\n'); var BOM = '\uFEFF'; var blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-      var link = document.createElement('a'); link.href = URL.createObjectURL(blob); var fecha = new Date().toISOString().slice(0, 10); link.download = 'wapi_moneymagnet_' + fecha + '.csv'; link.click();
-      alert('CSV descargado con ' + lote.length + ' contactos.\n\nINSTRUCCIONES:\n1. Abre WhatsApp Web en tu navegador\n2. Abre la extension WhatsApp Sender (Money Magnet)\n3. Toca "Seleccionar archivo del CRM" y carga este CSV\n4. Toca "Cargar contactos" y luego "Iniciar"\n\nSEGURIDAD (la extension lo controla sola):\n- Maximo 50 mensajes por lote\n- No mas de 150 mensajes por dia\n- Delay automatico entre mensajes\n- Si WhatsApp muestra captcha, se detiene sola\n' + (exportables.length > LIMITE_LOTE ? '\nQuedan ' + (exportables.length - LIMITE_LOTE) + ' contactos para el siguiente lote.' : ''));
-    };
+    // ============================================================
+// REEMPLAZA tu función window.exportarWAPI EN EL CRM por esta.
+// Cambios:
+//  - El CSV ahora lleva 3 columnas: telefono,email,mensaje
+//    (el email lo necesita la extensión para marcar el contacto)
+//  - Incrusta el token del CRM en una 4ta columna oculta de la 1ª fila
+//  - El mensaje incluye la HORA LOCAL del país del lead (base 8PM Colombia)
+// ============================================================
+window.exportarWAPI = function() {
+  if (confCache.length === 0) { alert('No hay contactos cargados. Primero ve a la pestaña Confirmación.'); return; }
+
+  var exportables = confCache.filter(function(c) {
+    var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
+    return tel.length >= 8 && c.confirmacion !== 'confirmado' && c.confirmacion !== 'no_asistira';
+  });
+  if (exportables.length === 0) { alert('No hay contactos pendientes con teléfono válido para exportar.'); return; }
+
+  var esNicolas = !userNombre || userNombre.toLowerCase().indexOf('nicolas') >= 0 || userNombre.toLowerCase().indexOf('nicolás') >= 0;
+  var LIMITE_LOTE = 50;
+  var lote = exportables.slice(0, LIMITE_LOTE);
+
+  // ── Conversión de hora local por país (base 8 PM Colombia, UTC-5) ──
+  var OFFSET_COL = -5;
+  var OFFSETS = {
+    'colombia':-5,'peru':-5,'perú':-5,'ecuador':-5,'panama':-5,'panamá':-5,
+    'mexico':-6,'méxico':-6,'guatemala':-6,'honduras':-6,'el salvador':-6,'nicaragua':-6,'costa rica':-6,
+    'venezuela':-4,'bolivia':-4,'republica dominicana':-4,'dominican republic':-4,'puerto rico':-4,'paraguay':-4,
+    'chile':-3,'argentina':-3,'uruguay':-3,'brasil':-3,'brazil':-3,
+    'espana':2,'españa':2,'spain':2,'italia':2,'francia':2,'alemania':2,'holanda':2,'suiza':2,
+    'portugal':1,'reino unido':1,'uk':1,
+    'estados unidos':-5,'united states':-5,'usa':-5,'eeuu':-5
+  };
+  function horaLocal(pais) {
+    var p = String(pais || '').toLowerCase().trim();
+    var off = OFFSETS.hasOwnProperty(p) ? OFFSETS[p] : OFFSET_COL;
+    var h = 20 + (off - OFFSET_COL); var dia = '';
+    if (h >= 24) { h -= 24; dia = ' del dia siguiente'; }
+    if (h < 0) { h += 24; dia = ' del dia anterior'; }
+    var ampm = h >= 12 ? 'PM' : 'AM'; var h12 = h % 12; if (h12 === 0) h12 = 12;
+    var nombre = p ? (p.charAt(0).toUpperCase() + p.slice(1)) : 'tu pais';
+    return h12 + ':00 ' + ampm + ' hora de ' + nombre + dia;
+  }
+
+  // Primera fila: encabezado + token incrustado (la extensión lo lee)
+  var TOKEN = token || '';
+  var filas = [['telefono', 'email', 'mensaje', TOKEN]];
+
+  lote.forEach(function(c) {
+    var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
+    var email = String(c.email || '');
+    var primerNombre = String(c.nombre || '').split(' ')[0];
+    primerNombre = primerNombre.charAt(0).toUpperCase() + primerNombre.slice(1).toLowerCase();
+    var sexo = String(c.sexo || '').toUpperCase();
+    var preparado = (sexo === 'F') ? 'preparada' : 'preparado';
+    var horaTxt = horaLocal(c.pais);
+
+    var firma, rolTxt;
+    if (esNicolas) {
+      firma = 'Soy Nicolas, te escribo personalmente de Money Magnet.';
+      rolTxt = 'Voy a ser tu punto de contacto antes y durante el evento.';
+    } else {
+      firma = 'Soy ' + (userNombre || 'tu asesor') + ', Director de Experiencias de Money Magnet, del equipo de Nicolas Cuellar.';
+      rolTxt = 'Mi funcion es que tu experiencia en el evento sea increible.';
+    }
+
+    var mensaje;
+    if (c.engagement === 'activo') {
+      mensaje = 'Hola ' + primerNombre + '\n\n' + firma + '\n\n' +
+        'Vi que te registraste en Money Magnet y me da mucho gusto. ' + rolTxt + '\n\n' +
+        'El evento es a las ' + horaTxt + '. Tengo unas recomendaciones importantes para que llegues ' + preparado + ' y aproveches cada minuto. ' +
+        'Son las reglas del juego del dinero que nadie te ensena, y en 2 horas vas a entender por que tu dinero no crece como deberia.\n\n' +
+        'Me gustaria hacerte una llamada rapida de 5 minutos para conocerte y que llegues con todo listo. Tienes un espacio esta semana?';
+    } else if (c.engagement === 'frio') {
+      mensaje = 'Hola ' + primerNombre + '\n\n' + firma + ' ' + rolTxt + '\n\n' +
+        'Te escribo porque te registraste en Money Magnet y quiero que sepas lo que te espera:\n\n' +
+        'El evento es a las ' + horaTxt + '. En 2 horas en vivo vas a descubrir las reglas del juego del dinero, ' +
+        'por que el dinero que ganas nunca llega a multiplicarse, y que hacen diferente quienes si logran que su capital trabaje para ellos.\n\n' +
+        'Tengo unas recomendaciones para que aproveches el evento al maximo. Tienes un espacio para una llamada rapida?';
+    } else {
+      mensaje = 'Hola ' + primerNombre + '\n\n' + firma + '\n\n' +
+        'Me da gusto que te hayas registrado en Money Magnet. ' + rolTxt + '\n\n' +
+        'El evento es a las ' + horaTxt + '. Quiero asegurarme de que recibiste toda la informacion. ' +
+        'A veces los correos caen en spam y no quiero que te pierdas nada.\n\n' +
+        'Ademas tengo unas recomendaciones importantes para que llegues ' + preparado + ' y aproveches cada minuto. ' +
+        'Tienes un espacio para una llamada rapida esta semana?';
+    }
+
+    mensaje = mensaje.replace(/"/g, '""');
+    filas.push([tel, '"' + email + '"', '"' + mensaje + '"', '']);
+  });
+
+  var csv = filas.map(function(f) { return f.join(','); }).join('\n');
+  var BOM = '\uFEFF';
+  var blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  var fecha = new Date().toISOString().slice(0, 10);
+  link.download = 'wapi_moneymagnet_' + fecha + '.csv';
+  link.click();
+
+  alert(
+    'CSV descargado con ' + lote.length + ' contactos.\n\n' +
+    'Cada mensaje ya trae la hora del evento en la zona horaria del lead.\n\n' +
+    'INSTRUCCIONES:\n' +
+    '1. Abre WhatsApp Web en tu navegador\n' +
+    '2. Abre la extension WhatsApp Sender (Money Magnet)\n' +
+    '3. Toca "Seleccionar archivo del CRM" y carga este CSV\n' +
+    '4. Toca "Cargar contactos" y luego "Iniciar"\n\n' +
+    'La extension marcara solo en el CRM a cada persona contactada.\n' +
+    (exportables.length > LIMITE_LOTE ? '\nQuedan ' + (exportables.length - LIMITE_LOTE) + ' contactos para el siguiente lote.' : '')
+  );
+};
     function cargarComisiones() {
       $('btn-reprocesar-com').style.display = (userRol === 'admin') ? '' : 'none';
       $('comisiones-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
