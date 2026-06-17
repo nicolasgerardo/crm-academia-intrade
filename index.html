@@ -788,8 +788,13 @@
       apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: estadoVal }, extra)).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
     };
     var confCache = [];
+    var titanesAsignables = [];
     function cargarConfirmacion() {
       $('conf-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
+      var pasoTitanes = (userRol === 'admin' && titanesAsignables.length === 0)
+        ? apiGet('crm_titanes_listar').then(function(rt){ if (rt && rt.ok) titanesAsignables = (rt.data || []).filter(function(t){ return t.activo; }); }).catch(function(){})
+        : Promise.resolve();
+      pasoTitanes.then(function(){
       apiGet('crm_engagement_inscritos', {}).then(function(res){
         if (!res.ok) { $('conf-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
         confCache = res.data.rows || []; $('conf-count').textContent = confCache.length;
@@ -798,6 +803,7 @@
         $('conf-resumen').innerHTML = tarjetaResumen('🟢 Activos', act, '#34d399') + tarjetaResumen('🟡 Pendientes', pend, '#f59e0b') + tarjetaResumen('🔴 Fríos', frio, '#f87171') + tarjetaResumen('✅ Confirmados', conf, '#F5B800');
         filtrarConfirmacion();
       }).catch(function(err){ $('conf-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
+      });
     }
     window.filtrarConfirmacion = function() {
       var q = ($('conf-busqueda').value || '').toLowerCase().trim(); var eng = $('conf-filtro-engagement').value; var grupo = $('conf-filtro-grupo').value; var estado = $('conf-filtro-estado').value;
@@ -817,7 +823,12 @@
         var contactadoBadge = c.contactado ? ' <span style="background:rgba(37,211,102,0.15);color:#25D366;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">📲 CONTACTADO</span>' : '';
         var emailInfo = c.emails_abiertos > 0 ? '<span style="color:#34d399;font-size:11px;">📧 ' + c.emails_abiertos + ' abierto(s)' + (c.emails_clicks > 0 ? ' · ' + c.emails_clicks + ' clic(s)' : '') + '</span>' : '<span style="color:#f87171;font-size:11px;">📧 Sin abrir</span>';
         var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
-        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><div><div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + contactadoBadge + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div><div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div></div><div>' + engBadge + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' + (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') + (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') + '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button><button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button><button onclick="confBoletoInvitado(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || 'latam_bajo') + '\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎟️ Invitado</button></div></div>';
+        var asigCtrl = '';
+        if (userRol === 'admin' && titanesAsignables.length) {
+          var optsT = titanesAsignables.map(function(t){ return '<option value="' + escapeHtml(t.email) + '">' + escapeHtml(t.nombre || t.email) + '</option>'; }).join('');
+          asigCtrl = '<select id="asig-' + i + '" style="padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:12px;"><option value="">Asignar a Titán…</option>' + optsT + '</select><button onclick="asignarLeadTitan(\'' + escapeHtml(c.email) + '\',' + i + ')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">👤 Asignar</button>';
+        }
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><div><div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + contactadoBadge + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div><div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div></div><div>' + engBadge + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' + (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') + (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') + '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button><button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button><button onclick="confBoletoInvitado(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || 'latam_bajo') + '\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎟️ Invitado</button>' + asigCtrl + '</div></div>';
       }).join('');
     };
     window.confWhatsApp = function(email, nombre, telefono, engagement, sexo) {
@@ -834,6 +845,16 @@
     window.confBoletoInvitado = function(email, nombre, apellido, telefono, grupo) {
       var leadDatos = { nombre: nombre || '', apellido: apellido || '', telefono: telefono || '', whatsapp: telefono || '', lead_email: email };
       abrirGeneradorBoletos(email, grupo || 'latam_bajo', leadDatos);
+    };
+    window.asignarLeadTitan = function(email, i) {
+      var sel = $('asig-' + i); if (!sel) return;
+      var titanEmail = sel.value;
+      if (!titanEmail) { alert('Elige un Titán de la lista.'); return; }
+      if (!confirm('¿Asignar este lead a ' + titanEmail + '?')) return;
+      apiPost('crm_asignar_lead_titan', { lead_email: email, titan_email: titanEmail }).then(function(res){
+        if (res.ok) { alert('Lead asignado a ' + titanEmail + (res.creado ? ' (nuevo en la campaña)' : '')); cargarConfirmacion(); }
+        else { alert('Error: ' + (res.error || '')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
     };
 // ============================================================
 // REEMPLAZA tu función window.exportarWAPI EN EL CRM por esta. (v4)
