@@ -682,18 +682,15 @@
       if (!L) return;
       var tel = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g, '');
       if (tel.length < 8) { alert('Este lead no tiene un número de WhatsApp válido.'); return; }
-      var pn = String(L.nombre || '').split(' ')[0];
-      pn = pn ? (pn.charAt(0).toUpperCase() + pn.slice(1).toLowerCase()) : '';
-      var titan = String(userNombre || '').trim().split(' ')[0]; if (!titan) titan = 'tu asesor';
-      var pais = L.pais || paisDesdeGrupo(L.grupo);
-      var horaTxt = horaEventoLocal(pais);
-      var FECHA_TXT = 'el jueves 18 de junio';
-      var mensaje =
-        'Hola ' + pn + ' 👋 Soy ' + titan + ', de Money Magnet. Te escribo porque te registraste y quería darte la bienvenida personalmente.\n\n' +
-        'Te registraste porque sabes que tu dinero puede hacer mucho más que quedarse quieto — y tienes toda la razón. Lo que pasa es que a casi nadie le enseñaron las reglas del juego del dinero, así que terminamos trabajando cada vez más y aun así sin avanzar (a todos nos pasó, jaja).\n\n' +
-        'El evento es ' + FECHA_TXT + ' a las ' + horaTxt + '. Ahí te enseño esas reglas paso a paso para que aprendas a multiplicar tu dinero 🔥\n\n' +
-        'Por cierto, tengo unos canales de WhatsApp y Telegram donde comparto toda la info del evento. ¿Quieres que te pase el acceso?';
-      window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(mensaje), '_blank');
+      // Generamos el mensaje en el backend: ahí la fecha se calcula por el grupo
+      // del lead (18/19/20 de junio) y la firma sale del rol de la sesión.
+      apiPost('crm_whatsapp_confirmar', {
+        email: L.lead_email, nombre: L.nombre || '', telefono: tel,
+        engagement: L.engagement || '', sexo: L.sexo || '', titan_nombre: userNombre || ''
+      }).then(function(res){
+        if (res.ok && res.link) { window.open(res.link, '_blank'); }
+        else { alert('Error: ' + (res.error || 'No se pudo generar el mensaje')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
     };
     function tarjetaLead(L){
       var nombre = (L.nombre || '') + ' ' + (L.apellido || ''); nombre = nombre.trim() || L.lead_email;
@@ -1099,7 +1096,13 @@
 window.exportarWAPI = function() {
   if (confCache.length === 0) { alert('No hay contactos cargados. Primero ve a la pestaña Confirmación.'); return; }
 
-  var FECHA_TXT = 'el jueves 18 de junio'; // cambia si reutilizas para otro evento
+  // Fecha por grupo del lead (18 latam_bajo / 19 latam_alto / 20 europa).
+  // Si cambias las fechas del evento, actualízalas aquí también.
+  var FECHA_POR_GRUPO = {
+    latam_bajo: 'el jueves 18 de junio',
+    latam_alto: 'el viernes 19 de junio',
+    europa: 'el sábado 20 de junio'
+  };
 
   // Respaldo de sesión (el filtro principal es c.contactado del servidor)
   var HKEY = 'wapi_exportados';
@@ -1154,6 +1157,7 @@ window.exportarWAPI = function() {
     var pn = String(c.nombre || '').split(' ')[0];
     pn = pn.charAt(0).toUpperCase() + pn.slice(1).toLowerCase();
     var horaTxt = horaLocal(c.pais);
+    var FECHA_TXT = FECHA_POR_GRUPO[c.grupo] || FECHA_POR_GRUPO.latam_bajo;
 
     var mensaje =
       'Hola ' + pn + ' 👋 Te escribo porque te registraste a Money Magnet, y quería darte la bienvenida personalmente.\n\n' +
