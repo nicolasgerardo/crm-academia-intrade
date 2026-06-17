@@ -145,6 +145,7 @@
           <button class="app-tab" data-tab="misleads">Mis Leads</button>
           <button class="app-tab" data-tab="boletos">Boletos</button>
           <button class="app-tab" data-tab="confirmacion">Confirmación</button>
+          <button class="app-tab" data-tab="seguimiento">Seguimiento</button>
           <button class="app-tab" data-tab="comisiones">Comisiones</button>
           <button class="app-tab" data-tab="contactos">Contactos</button>
           <button class="app-tab" data-tab="pagos">Pagos VIP</button>
@@ -220,7 +221,31 @@
             <option value="sin_contactar_wa">Sin contactar</option>
           </select>
         </div>
-        <div id="conf-lista"><div style="color:#9CA3AF;">Cargando…</div></div>
+      </section>
+      <section id="tab-seguimiento" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <h2 class="section-title" style="margin:0;">Seguimiento de cierre <span class="badge" id="seg-count">0</span></h2>
+          <div style="display:flex;gap:8px;">
+            <button onclick="abrirAgregarSeguimiento()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">+ Agregar prospecto</button>
+            <button onclick="cargarSeguimiento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar</button>
+          </div>
+        </div>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Pipeline de cierre high ticket (497 / 997 USD). Agenda el próximo contacto, deja notas y marca el cierre. "Para hoy" te muestra a quién tienes que llamar ya.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;" id="seg-resumen"></div>
+        <div class="table-controls">
+          <input type="text" id="seg-busqueda" placeholder="Buscar por nombre, email o teléfono…" oninput="renderSeguimiento()">
+          <select id="seg-filtro-estado" onchange="renderSeguimiento()">
+            <option value="">Todos los estados</option>
+            <option value="sin_llamar">Sin llamar</option>
+            <option value="llamado">Llamado</option>
+            <option value="propuesta_enviada">Propuesta enviada</option>
+            <option value="cerrado_497">Cerrado $497</option>
+            <option value="cerrado_997">Cerrado $997</option>
+            <option value="perdido">Perdido</option>
+          </select>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#C9CCD6;cursor:pointer;"><input type="checkbox" id="seg-solo-hoy" onchange="renderSeguimiento()"> Para hoy</label>
+        </div>
+        <div id="seg-lista"><div style="color:#9CA3AF;">Cargando…</div></div>
       </section>
       <section id="tab-comisiones" class="tab-content" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -477,6 +502,7 @@
       if (tab === 'misleads') cargarMisLeads();
       if (tab === 'boletos') cargarBoletos();
       if (tab === 'confirmacion') cargarConfirmacion();
+      if (tab === 'seguimiento') cargarSeguimiento();
       if (tab === 'comisiones') cargarComisiones();
       if (tab === 'contactos') cargarContactos();
       if (tab === 'pagos') cargarPagos();
@@ -855,6 +881,106 @@
         if (res.ok) { alert('Lead asignado a ' + titanEmail + (res.creado ? ' (nuevo en la campaña)' : '')); cargarConfirmacion(); }
         else { alert('Error: ' + (res.error || '')); }
       }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+
+    // ====================== SEGUIMIENTO DE CIERRE ======================
+    var segCache = [];
+    var segEstados = [];
+    var segEsAdmin = false;
+    var SEG_ETIQUETAS = { sin_llamar:'Sin llamar', llamado:'Llamado', propuesta_enviada:'Propuesta enviada', cerrado_497:'Cerrado · $497', cerrado_997:'Cerrado · $997', perdido:'Perdido' };
+    var SEG_COLOR = { sin_llamar:'#60a5fa', llamado:'#f59e0b', propuesta_enviada:'#a78bfa', cerrado_497:'#34d399', cerrado_997:'#F5B800', perdido:'#f87171' };
+    function cargarSeguimiento(){
+      $('seg-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
+      apiGet('crm_seguimiento_metricas', {}).then(function(rm){
+        if (rm && rm.ok){ segEsAdmin = rm.es_admin; pintarSegResumen(rm.data, rm.por_titan); }
+      }).catch(function(){});
+      apiGet('crm_seguimiento_listar', {}).then(function(res){
+        if (!res.ok){ $('seg-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
+        segCache = res.data || []; segEstados = res.estados || []; segEsAdmin = res.es_admin;
+        $('seg-count').textContent = segCache.length;
+        renderSeguimiento();
+      }).catch(function(err){ $('seg-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
+    }
+    function pintarSegResumen(d, porTitan){
+      if (!d) return;
+      var enPipeline = d.sin_llamar + d.llamado + d.propuesta_enviada;
+      var cerrados = d.cerrado_497 + d.cerrado_997;
+      var html = tarjetaResumen('🔵 En pipeline', enPipeline, '#60a5fa')
+        + tarjetaResumen('📞 Para hoy', d.hoy_pendientes, '#f59e0b')
+        + tarjetaResumen('✅ Cerrados', cerrados, '#34d399')
+        + tarjetaResumen('💵 Ingresos', '$' + (d.ingresos_usd||0), '#F5B800');
+      $('seg-resumen').innerHTML = html;
+    }
+    function fmtFechaHora(iso){ if (!iso) return ''; try { var dt = new Date(iso); return dt.toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) + ' ' + dt.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+    function isoLocalInput(iso){ if (!iso) return ''; try { var dt = new Date(iso); var off = dt.getTimezoneOffset(); var local = new Date(dt.getTime() - off*60000); return local.toISOString().slice(0,16); } catch(e){ return ''; } }
+    window.renderSeguimiento = function(){
+      var q = ($('seg-busqueda').value||'').toLowerCase().trim();
+      var fEstado = $('seg-filtro-estado').value;
+      var soloHoy = $('seg-solo-hoy').checked;
+      var finHoy = new Date(); finHoy.setHours(23,59,59,999);
+      var cerrados = ['cerrado_497','cerrado_997','perdido'];
+      var filtrados = segCache.filter(function(s){
+        if (q && (s.lead_email+' '+s.nombre+' '+s.telefono).toLowerCase().indexOf(q) < 0) return false;
+        if (fEstado && s.estado_cierre !== fEstado) return false;
+        if (soloHoy){
+          if (cerrados.indexOf(s.estado_cierre) >= 0) return false;
+          if (!s.proximo_contacto) return false;
+          var pc = new Date(s.proximo_contacto);
+          if (isNaN(pc.getTime()) || pc.getTime() > finHoy.getTime()) return false;
+        }
+        return true;
+      });
+      if (filtrados.length === 0){ $('seg-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay prospectos en seguimiento que coincidan.</div>'; return; }
+      var opcionesEstado = ['sin_llamar','llamado','propuesta_enviada','cerrado_497','cerrado_997','perdido'].map(function(v){ return '<option value="'+v+'">'+SEG_ETIQUETAS[v]+'</option>'; }).join('');
+      $('seg-lista').innerHTML = filtrados.map(function(s, i){
+        var nombre = (s.nombre || '').trim() || s.lead_email;
+        var color = SEG_COLOR[s.estado_cierre] || '#9CA3AF';
+        var wa = String(s.telefono||'').replace(/[^0-9]/g,'');
+        var vencido = '';
+        if (s.proximo_contacto && cerrados.indexOf(s.estado_cierre) < 0){ var pc = new Date(s.proximo_contacto); if (!isNaN(pc.getTime()) && pc.getTime() < Date.now()) vencido = '<span style="color:#f87171;font-size:11px;font-weight:700;margin-left:6px;">⏰ vencido</span>'; }
+        var botones = '';
+        if (wa) botones += '<a href="https://wa.me/'+wa+'" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 12px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">WhatsApp</a>';
+        if (s.telefono) botones += '<a href="tel:'+escapeHtml(s.telefono)+'" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 12px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">Llamar</a>';
+        var capTxt = s.capital ? ('<span style="color:#6B7280;font-size:11px;"> · Capital: '+escapeHtml(s.capital)+'</span>') : '';
+        var fuenteTxt = s.fuente ? ('<span style="color:#6B7280;font-size:11px;"> · '+escapeHtml(s.fuente)+'</span>') : '';
+        var titanTxt = (segEsAdmin && s.titan_asignado) ? ('<div style="font-size:11px;color:#6B7280;margin-top:2px;">Titán: '+escapeHtml(s.titan_asignado)+'</div>') : (segEsAdmin && !s.titan_asignado ? '<div style="font-size:11px;color:#f59e0b;margin-top:2px;">⚠️ Sin asignar</div>' : '');
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:12px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
+          + '<div><div style="font-weight:700;font-size:15px;">'+escapeHtml(nombre)+'</div>'
+          + '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">'+escapeHtml(s.lead_email)+(s.telefono?' · '+escapeHtml(s.telefono):'')+capTxt+fuenteTxt+'</div>'+titanTxt+'</div>'
+          + '<span style="font-size:11px;font-weight:700;background:'+color+'22;color:'+color+';padding:3px 10px;border-radius:100px;white-space:nowrap;">'+escapeHtml(SEG_ETIQUETAS[s.estado_cierre]||s.estado_cierre)+'</span>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+botones+'</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+          + '<div><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Estado</label><select id="seg-estado-'+i+'" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">'+opcionesEstado+'</select></div>'
+          + '<div><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Próximo contacto'+vencido+'</label><input type="datetime-local" id="seg-prox-'+i+'" value="'+isoLocalInput(s.proximo_contacto)+'" style="width:100%;padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;color-scheme:dark;"></div>'
+          + '</div>'
+          + '<label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Notas</label>'
+          + '<textarea id="seg-notas-'+i+'" rows="2" placeholder="Qué se habló, objeciones, siguiente paso…" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;">'+escapeHtml(s.notas||'')+'</textarea>'
+          + '<div style="text-align:right;margin-top:10px;"><button onclick="guardarSeguimiento(\''+escapeHtml(s.lead_email)+'\','+i+')" style="background:#F5B800;color:#0B1131;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">Guardar</button></div>'
+          + '</div>';
+      }).join('');
+      filtrados.forEach(function(s, i){ var sel = $('seg-estado-'+i); if (sel) sel.value = s.estado_cierre; });
+      window._segFiltrados = filtrados;
+    };
+    window.guardarSeguimiento = function(email, i){
+      var estado = $('seg-estado-'+i).value;
+      var prox = $('seg-prox-'+i).value;
+      var notas = $('seg-notas-'+i).value;
+      var proxIso = prox ? new Date(prox).toISOString() : '';
+      apiPost('crm_seguimiento_actualizar', { lead_email: email, estado: estado, proximo_contacto: proxIso, notas: notas }).then(function(res){
+        if (res.ok){ cargarSeguimiento(); } else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
+    };
+    window.abrirAgregarSeguimiento = function(){
+      var email = prompt('Correo del prospecto:'); if (!email) return;
+      var nombre = prompt('Nombre:') || '';
+      var telefono = prompt('Teléfono (con indicativo, ej. +57…):') || '';
+      var capital = prompt('Capital con el que trabaja (opcional):') || '';
+      apiPost('crm_seguimiento_agregar', { lead_email: email, nombre: nombre, telefono: telefono, capital: capital, fuente: 'manual' }).then(function(res){
+        if (res.ok){ alert(res.ya_existia ? 'Ese prospecto ya estaba en seguimiento.' : 'Prospecto agregado.'); cargarSeguimiento(); }
+        else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
     };
 // ============================================================
 // REEMPLAZA tu función window.exportarWAPI EN EL CRM por esta. (v4)
