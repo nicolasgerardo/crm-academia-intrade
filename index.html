@@ -616,6 +616,51 @@
       return 'contactados';
     }
     window.setMisLeadsSubtab = function(t){ misLeadsSubtab = t; renderMisLeads(misLeadsMax, misLeadsAviso); };
+    // ── Mensaje WhatsApp personalizado para Mis Leads (se arma aquí, no en el backend) ──
+    var WA_OFFSET_COL = -5;
+    var WA_OFFSETS = {
+      'colombia':-5,'peru':-5,'perú':-5,'ecuador':-5,'panama':-5,'panamá':-5,
+      'mexico':-6,'méxico':-6,'guatemala':-6,'honduras':-6,'el salvador':-6,'nicaragua':-6,'costa rica':-6,
+      'venezuela':-4,'bolivia':-4,'republica dominicana':-4,'república dominicana':-4,'dominican republic':-4,'puerto rico':-4,'paraguay':-4,
+      'chile':-3,'argentina':-3,'uruguay':-3,'brasil':-3,'brazil':-3,
+      'espana':2,'españa':2,'spain':2,'italia':2,'francia':2,'alemania':2,'holanda':2,'suiza':2,
+      'portugal':1,'reino unido':1,'uk':1,
+      'estados unidos':-5,'united states':-5,'usa':-5,'eeuu':-5
+    };
+    function paisDesdeGrupo(grupo){
+      var g = String(grupo || '').toLowerCase();
+      if (g.indexOf('europa') >= 0) return 'españa';
+      return 'colombia'; // latam_bajo / latam_alto: base hora Colombia
+    }
+    function horaEventoLocal(pais){
+      var p = String(pais || '').toLowerCase().trim();
+      var conocido = WA_OFFSETS.hasOwnProperty(p);
+      var off = conocido ? WA_OFFSETS[p] : WA_OFFSET_COL;
+      var h = 20 + (off - WA_OFFSET_COL); var dia = '';
+      if (h >= 24) { h -= 24; dia = ' (madrugada del día siguiente)'; }
+      if (h < 0)   { h += 24; dia = ' (la noche anterior)'; }
+      var ampm = h >= 12 ? 'PM' : 'AM'; var h12 = h % 12; if (h12 === 0) h12 = 12;
+      if (conocido) { var nombre = p.charAt(0).toUpperCase() + p.slice(1); return h12 + ':00 ' + ampm + ' hora de ' + nombre + dia; }
+      return h12 + ':00 ' + ampm + ' hora Colombia' + dia + ' (ajústalo a tu zona)';
+    }
+    window.waLead = function(leadEmail){
+      var L = (misLeadsCache || []).filter(function(l){ return String(l.lead_email) === String(leadEmail); })[0];
+      if (!L) return;
+      var tel = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g, '');
+      if (tel.length < 8) { alert('Este lead no tiene un número de WhatsApp válido.'); return; }
+      var pn = String(L.nombre || '').split(' ')[0];
+      pn = pn ? (pn.charAt(0).toUpperCase() + pn.slice(1).toLowerCase()) : '';
+      var titan = String(userNombre || '').trim().split(' ')[0]; if (!titan) titan = 'tu asesor';
+      var pais = L.pais || paisDesdeGrupo(L.grupo);
+      var horaTxt = horaEventoLocal(pais);
+      var FECHA_TXT = 'el jueves 18 de junio';
+      var mensaje =
+        'Hola ' + pn + ' 👋 Soy ' + titan + ', de Money Magnet. Te escribo porque te registraste y quería darte la bienvenida personalmente.\n\n' +
+        'Te registraste porque sabes que tu dinero puede hacer mucho más que quedarse quieto — y tienes toda la razón. Lo que pasa es que a casi nadie le enseñaron las reglas del juego del dinero, así que terminamos trabajando cada vez más y aun así sin avanzar (a todos nos pasó, jaja).\n\n' +
+        'El evento es ' + FECHA_TXT + ' a las ' + horaTxt + '. Ahí te enseño esas reglas paso a paso para que aprendas a multiplicar tu dinero 🔥\n\n' +
+        'Por cierto, tengo unos canales de WhatsApp y Telegram donde comparto toda la info del evento. ¿Quieres que te pase el acceso?';
+      window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(mensaje), '_blank');
+    };
     function tarjetaLead(L){
       var nombre = (L.nombre || '') + ' ' + (L.apellido || ''); nombre = nombre.trim() || L.lead_email;
       var tel = String(L.telefono || L.whatsapp || ''); var wa = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g,'');
@@ -623,7 +668,7 @@
       if (L.estado === 'no_contactado') estadoColor = '#60a5fa'; else if (L.estado === 'no_respondio') estadoColor = '#f59e0b'; else if (['confirmado','confirmado_whatsapp','vip_llamada','vip_adicional'].indexOf(L.estado)>=0) estadoColor = '#34d399'; else if (['duplicado','erroneo'].indexOf(L.estado)>=0) estadoColor = '#f87171';
       var intentosTxt = (L.estado === 'no_respondio' && L.intentos > 0) ? '<span style="font-size:11px;color:#f59e0b;margin-left:6px;">· ' + L.intentos + ' intento(s)</span>' : '';
       var botonesContacto = '';
-      if (wa) botonesContacto += '<button onclick="confWhatsApp(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.nombre||'') + '\',\'' + wa + '\',\'' + escapeHtml(L.engagement||'pendiente') + '\',\'' + escapeHtml(L.sexo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">&#128172; WhatsApp</button>';
+      if (wa) botonesContacto += '<button onclick="waLead(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">&#128172; WhatsApp</button>';
       if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">&#128222; Llamar</a>';
       return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;"><div><div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div><div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' + (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + (misLeadsCampania ? ' · Campaña: ' + escapeHtml(misLeadsCampania) : '') + '</div>' : '') + '</div><span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto + '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">No respondió</button><button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Generar boleto</button></div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + botonesEstadoLead(L) + '</div></div>';
     }
