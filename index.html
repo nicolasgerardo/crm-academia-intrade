@@ -226,11 +226,12 @@
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
           <h2 class="section-title" style="margin:0;">Seguimiento de cierre <span class="badge" id="seg-count">0</span></h2>
           <div style="display:flex;gap:8px;">
+            <button id="seg-btn-importar" onclick="importarInscritosSeguimiento()" style="display:none;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">Importar inscritos</button>
             <button onclick="abrirAgregarSeguimiento()" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">+ Agregar prospecto</button>
             <button onclick="cargarSeguimiento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Actualizar</button>
           </div>
         </div>
-        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Pipeline de cierre high ticket (497 / 997 USD). Agenda el próximo contacto, deja notas y marca el cierre. "Para hoy" te muestra a quién tienes que llamar ya.</p>
+        <p style="color:#9CA3AF;font-size:13px;margin:8px 0 18px;">Pipeline de cierre high ticket (497 / 997 USD). Los 🔥 interesados (llenaron la landing) van primero; los demás son inscritos del webinar que también hay que cerrar. "Para hoy" te muestra a quién llamar ya.</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;" id="seg-resumen"></div>
         <div class="table-controls">
           <input type="text" id="seg-busqueda" placeholder="Buscar por nombre, email o teléfono…" oninput="renderSeguimiento()">
@@ -243,6 +244,7 @@
             <option value="cerrado_997">Cerrado $997</option>
             <option value="perdido">Perdido</option>
           </select>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#C9CCD6;cursor:pointer;"><input type="checkbox" id="seg-solo-interes" onchange="renderSeguimiento()"> 🔥 Solo interesados</label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#C9CCD6;cursor:pointer;"><input type="checkbox" id="seg-solo-hoy" onchange="renderSeguimiento()"> Para hoy</label>
         </div>
         <div id="seg-lista"><div style="color:#9CA3AF;">Cargando…</div></div>
@@ -866,7 +868,7 @@
           var optsT = titanesAsignables.map(function(t){ return '<option value="' + escapeHtml(t.email) + '">' + escapeHtml(t.nombre || t.email) + '</option>'; }).join('');
           asigCtrl = '<select id="asig-' + i + '" style="padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:12px;"><option value="">Asignar a Titán…</option>' + optsT + '</select><button onclick="asignarLeadTitan(\'' + escapeHtml(c.email) + '\',' + i + ')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">👤 Asignar</button>';
         }
-        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><div><div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + contactadoBadge + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div><div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div></div><div>' + engBadge + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' + (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') + (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') + '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button><button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button><button onclick="confBoletoInvitado(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || 'latam_bajo') + '\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎟️ Invitado</button>' + asigCtrl + '</div></div>';
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><div><div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + contactadoBadge + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div><div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div></div><div>' + engBadge + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' + (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') + (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') + '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button><button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button><button onclick="confBoletoInvitado(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || 'latam_bajo') + '\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎟️ Invitado</button><button onclick="confASeguimiento(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || '') + '\')" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">➕ Seguimiento</button>' + asigCtrl + '</div></div>';
       }).join('');
     };
     window.confWhatsApp = function(email, nombre, telefono, engagement, sexo) {
@@ -903,6 +905,13 @@
     window.confBoletoInvitado = function(email, nombre, apellido, telefono, grupo) {
       var leadDatos = { nombre: nombre || '', apellido: apellido || '', telefono: telefono || '', whatsapp: telefono || '', lead_email: email };
       abrirGeneradorBoletos(email, grupo || 'latam_bajo', leadDatos);
+    };
+    window.confASeguimiento = function(email, nombre, apellido, telefono, grupo){
+      var nombreCompleto = ((nombre||'') + ' ' + (apellido||'')).trim();
+      apiPost('crm_seguimiento_agregar', { lead_email: email, nombre: nombreCompleto, telefono: telefono || '', grupo: grupo || '', fuente: 'webinar' }).then(function(res){
+        if (res.ok){ alert(res.ya_existia ? 'Ya estaba en seguimiento.' : 'Agregado al pipeline de cierre.'); }
+        else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
     };
     window.asignarLeadTitan = function(email, i) {
       var sel = $('asig-' + i); if (!sel) return;
@@ -952,6 +961,7 @@
     var SEG_COLOR = { sin_llamar:'#60a5fa', llamado:'#f59e0b', propuesta_enviada:'#a78bfa', cerrado_497:'#34d399', cerrado_997:'#F5B800', perdido:'#f87171' };
     function cargarSeguimiento(){
       $('seg-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
+      var btnImp = $('seg-btn-importar'); if (btnImp) btnImp.style.display = (userRol === 'admin') ? '' : 'none';
       apiGet('crm_seguimiento_metricas', {}).then(function(rm){
         if (rm && rm.ok){ segEsAdmin = rm.es_admin; pintarSegResumen(rm.data, rm.por_titan); }
       }).catch(function(){});
@@ -978,11 +988,13 @@
       var q = ($('seg-busqueda').value||'').toLowerCase().trim();
       var fEstado = $('seg-filtro-estado').value;
       var soloHoy = $('seg-solo-hoy').checked;
+      var soloInteres = $('seg-solo-interes') ? $('seg-solo-interes').checked : false;
       var finHoy = new Date(); finHoy.setHours(23,59,59,999);
       var cerrados = ['cerrado_497','cerrado_997','perdido'];
       var filtrados = segCache.filter(function(s){
         if (q && (s.lead_email+' '+s.nombre+' '+s.telefono).toLowerCase().indexOf(q) < 0) return false;
         if (fEstado && s.estado_cierre !== fEstado) return false;
+        if (soloInteres && s.fuente !== 'landing') return false;
         if (soloHoy){
           if (cerrados.indexOf(s.estado_cierre) >= 0) return false;
           if (!s.proximo_contacto) return false;
@@ -995,6 +1007,7 @@
       var opcionesEstado = ['sin_llamar','llamado','propuesta_enviada','cerrado_497','cerrado_997','perdido'].map(function(v){ return '<option value="'+v+'">'+SEG_ETIQUETAS[v]+'</option>'; }).join('');
       $('seg-lista').innerHTML = filtrados.map(function(s, i){
         var nombre = (s.nombre || '').trim() || s.lead_email;
+        var interesBadge = (s.fuente === 'landing') ? ' <span style="background:rgba(245,184,0,0.18);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">🔥 INTERESADO</span>' : '';
         var color = SEG_COLOR[s.estado_cierre] || '#9CA3AF';
         var wa = String(s.telefono||'').replace(/[^0-9]/g,'');
         var vencido = '';
@@ -1007,7 +1020,7 @@
         var titanTxt = (segEsAdmin && s.titan_asignado) ? ('<div style="font-size:11px;color:#6B7280;margin-top:2px;">Titán: '+escapeHtml(s.titan_asignado)+'</div>') : (segEsAdmin && !s.titan_asignado ? '<div style="font-size:11px;color:#f59e0b;margin-top:2px;">⚠️ Sin asignar</div>' : '');
         return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:12px;">'
           + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
-          + '<div><div style="font-weight:700;font-size:15px;">'+escapeHtml(nombre)+'</div>'
+          + '<div><div style="font-weight:700;font-size:15px;">'+escapeHtml(nombre)+interesBadge+'</div>'
           + '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">'+escapeHtml(s.lead_email)+(s.telefono?' · '+escapeHtml(s.telefono):'')+capTxt+fuenteTxt+'</div>'+titanTxt+'</div>'
           + '<span style="font-size:11px;font-weight:700;background:'+color+'22;color:'+color+';padding:3px 10px;border-radius:100px;white-space:nowrap;">'+escapeHtml(SEG_ETIQUETAS[s.estado_cierre]||s.estado_cierre)+'</span>'
           + '</div>'
@@ -1048,6 +1061,15 @@
       setTimeout(function(){ var e = $('seg-add-email'); if (e) e.focus(); }, 50);
     };
     window.cerrarModalSeguimiento = function(){ $('modal-seguimiento').style.display = 'none'; };
+    window.importarInscritosSeguimiento = function(){
+      if (!confirm('Esto trae al pipeline a todos los inscritos del webinar que aún no estén, heredando el Titán que ya tienen asignado. ¿Continuar?')) return;
+      var btn = $('seg-btn-importar'); if (btn){ btn.disabled = true; btn.textContent = 'Importando…'; }
+      apiPost('crm_seguimiento_importar', {}).then(function(res){
+        if (btn){ btn.disabled = false; btn.textContent = 'Importar inscritos'; }
+        if (res.ok){ alert('Importados: ' + res.importados + '\nYa estaban: ' + (res.ya_estaban||0)); cargarSeguimiento(); }
+        else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ if (btn){ btn.disabled = false; btn.textContent = 'Importar inscritos'; } alert('Error: ' + (err&&err.message?err.message:err)); });
+    };
     window.guardarNuevoSeguimiento = function(){
       var email = ($('seg-add-email').value || '').trim();
       var msg = $('seg-add-msg');
