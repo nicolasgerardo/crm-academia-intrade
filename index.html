@@ -412,6 +412,8 @@
   <div id="modal-rango" class="modal-overlay" onclick="if(event.target===this)cerrarModalRango()" style="display:none;"><div class="modal" style="max-width:440px;"><button class="close" onclick="cerrarModalRango()">&times;</button><div id="modal-rango-content"></div></div></div>
   <div id="modal-boletos" class="modal-overlay" onclick="if(event.target===this)cerrarModalBoletos()" style="display:none;"><div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto;"><button class="close" onclick="cerrarModalBoletos()">&times;</button><div id="modal-boletos-content"></div></div></div>
   <div id="modal-detalle" class="modal-overlay" onclick="if(event.target===this)cerrarModal()"><div class="modal"><button class="close" onclick="cerrarModal()">&times;</button><div id="modal-content"></div></div></div>
+  <div id="modal-seguimiento" class="modal-overlay" onclick="if(event.target===this)cerrarModalSeguimiento()" style="display:none;"><div class="modal" style="max-width:460px;"><button class="close" onclick="cerrarModalSeguimiento()">&times;</button><div id="modal-seguimiento-content"></div></div></div>
+  <div id="modal-input" class="modal-overlay" onclick="if(event.target===this)cerrarModalInput()" style="display:none;"><div class="modal" style="max-width:440px;"><button class="close" onclick="cerrarModalInput()">&times;</button><div id="modal-input-content"></div></div></div>
   <script>
   (function() {
     'use strict';
@@ -808,10 +810,20 @@
       }).join('');
     }
     window.setEstadoLead = function(leadEmail, estadoVal){
-      var extra = {};
       if (estadoVal === 'no_respondio'){ return window.marcarNoRespondio(leadEmail); }
-      if (estadoVal === 'acompanante'){ var dq = prompt('¿De quién es acompañante? (nombre o correo del lead principal)'); if (dq === null) return; extra.acompanante_de = dq; }
-      apiPost('crm_cambiar_estado_lead', Object.assign({ lead_email: leadEmail, estado: estadoVal }, extra)).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
+      if (estadoVal === 'acompanante'){
+        return window.modalInput({
+          titulo: 'Marcar como acompañante',
+          label: '¿De quién es acompañante?',
+          placeholder: 'Nombre o correo del lead principal',
+          obligatorio: true,
+          textoBoton: 'Guardar',
+          onOk: function(dq){
+            apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: estadoVal, acompanante_de: dq }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
+          }
+        });
+      }
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: estadoVal }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
     };
     var confCache = [];
     var titanesAsignables = [];
@@ -861,12 +873,32 @@
       apiPost('crm_whatsapp_confirmar', { email: email, nombre: nombre, telefono: telefono, engagement: engagement, sexo: sexo || '', titan_nombre: userNombre || '' }).then(function(res){ if (res.ok && res.link) { window.open(res.link, '_blank'); } else { alert('Error: ' + (res.error || 'No se pudo generar el link')); } });
     };
     window.confMarcar = function(email, estado) {
-      var notas = ''; if (estado === 'no_asistira') { notas = prompt('¿Razón? (opcional)') || ''; }
-      apiPost('crm_marcar_confirmacion', { email: email, estado: estado, notas: notas }).then(function(res){ if (res.ok) { cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
+      if (estado === 'no_asistira') {
+        return window.modalInput({
+          titulo: 'Marcar como “No asistirá”',
+          label: 'Razón (opcional)',
+          placeholder: 'Ej. cambio de planes, no responde…',
+          multilinea: true,
+          textoBoton: 'Guardar',
+          onOk: function(notas){
+            apiPost('crm_marcar_confirmacion', { email: email, estado: estado, notas: notas || '' }).then(function(res){ if (res.ok) { cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
+          }
+        });
+      }
+      apiPost('crm_marcar_confirmacion', { email: email, estado: estado, notas: '' }).then(function(res){ if (res.ok) { cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
     };
     window.confReferido = function(email) {
-      var referido = prompt('Nombre y teléfono del referido:'); if (!referido) return;
-      apiPost('crm_marcar_confirmacion', { email: email, estado: 'confirmado', referido: referido }).then(function(res){ if (res.ok) { alert('¡Referido registrado! Se notificó por Telegram.'); cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
+      window.modalInput({
+        titulo: 'Registrar referido',
+        descripcion: 'Marca a este inscrito como confirmado y guarda el referido que te dio.',
+        label: 'Nombre y teléfono del referido',
+        placeholder: 'Ej. Ana Pérez +57 300 000 0000',
+        obligatorio: true,
+        textoBoton: 'Registrar',
+        onOk: function(referido){
+          apiPost('crm_marcar_confirmacion', { email: email, estado: 'confirmado', referido: referido }).then(function(res){ if (res.ok) { alert('¡Referido registrado! Se notificó por Telegram.'); cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
+        }
+      });
     };
     window.confBoletoInvitado = function(email, nombre, apellido, telefono, grupo) {
       var leadDatos = { nombre: nombre || '', apellido: apellido || '', telefono: telefono || '', whatsapp: telefono || '', lead_email: email };
@@ -881,6 +913,35 @@
         if (res.ok) { alert('Lead asignado a ' + titanEmail + (res.creado ? ' (nuevo en la campaña)' : '')); cargarConfirmacion(); }
         else { alert('Error: ' + (res.error || '')); }
       }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+
+    // ====================== MODAL DE ENTRADA GENÉRICO ======================
+    // Reemplaza los prompt() del navegador. opts: { titulo, descripcion,
+    // label, placeholder, valor, multilinea, obligatorio, textoBoton, onOk(valor) }
+    var _modalInputCb = null;
+    window.modalInput = function(opts){
+      opts = opts || {};
+      _modalInputCb = opts.onOk || null;
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;box-sizing:border-box;font-size:14px;';
+      var campo = opts.multilinea
+        ? '<textarea id="modal-input-field" rows="3" placeholder="'+escapeHtml(opts.placeholder||'')+'" style="'+inp+'resize:vertical;">'+escapeHtml(opts.valor||'')+'</textarea>'
+        : '<input id="modal-input-field" value="'+escapeHtml(opts.valor||'')+'" placeholder="'+escapeHtml(opts.placeholder||'')+'" style="'+inp+'">';
+      var html = '<h2 style="margin:0 0 4px;font-size:19px;">'+escapeHtml(opts.titulo||'')+'</h2>'
+        + (opts.descripcion ? '<p style="color:#9CA3AF;font-size:13px;margin:0 0 16px;">'+escapeHtml(opts.descripcion)+'</p>' : '<div style="height:12px;"></div>')
+        + (opts.label ? '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">'+escapeHtml(opts.label)+'</label>' : '')
+        + campo
+        + '<div id="modal-input-msg" style="font-size:12.5px;color:#f87171;min-height:16px;margin:6px 0;"></div>'
+        + '<div style="display:flex;gap:10px;"><button onclick="confirmarModalInput('+(opts.obligatorio?'true':'false')+')" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:12px;border-radius:8px;font-weight:700;cursor:pointer;">'+escapeHtml(opts.textoBoton||'Guardar')+'</button><button onclick="cerrarModalInput()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:12px 18px;border-radius:8px;cursor:pointer;">Cancelar</button></div>';
+      $('modal-input-content').innerHTML = html;
+      $('modal-input').style.display = 'flex';
+      setTimeout(function(){ var f = $('modal-input-field'); if (f) f.focus(); }, 50);
+    };
+    window.cerrarModalInput = function(){ $('modal-input').style.display = 'none'; _modalInputCb = null; };
+    window.confirmarModalInput = function(obligatorio){
+      var f = $('modal-input-field'); var val = f ? f.value.trim() : '';
+      if (obligatorio && !val){ $('modal-input-msg').textContent = 'Este campo es obligatorio.'; return; }
+      var cb = _modalInputCb; cerrarModalInput();
+      if (cb) cb(val);
     };
 
     // ====================== SEGUIMIENTO DE CIERRE ======================
@@ -973,14 +1034,30 @@
       }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
     };
     window.abrirAgregarSeguimiento = function(){
-      var email = prompt('Correo del prospecto:'); if (!email) return;
-      var nombre = prompt('Nombre:') || '';
-      var telefono = prompt('Teléfono (con indicativo, ej. +57…):') || '';
-      var capital = prompt('Capital con el que trabaja (opcional):') || '';
-      apiPost('crm_seguimiento_agregar', { lead_email: email, nombre: nombre, telefono: telefono, capital: capital, fuente: 'manual' }).then(function(res){
-        if (res.ok){ alert(res.ya_existia ? 'Ese prospecto ya estaba en seguimiento.' : 'Prospecto agregado.'); cargarSeguimiento(); }
-        else { alert('Error: ' + (res.error||'')); }
-      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;font-size:14px;';
+      var html = '<h2 style="margin:0 0 4px;font-size:20px;">Agregar prospecto</h2>'
+        + '<p style="color:#9CA3AF;font-size:13px;margin:0 0 18px;">Entra a la bandeja como “Sin llamar”. Solo el correo es obligatorio.</p>'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo *</label><input id="seg-add-email" type="email" placeholder="prospecto@correo.com" style="'+inp+'">'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre</label><input id="seg-add-nombre" placeholder="Nombre y apellido" style="'+inp+'">'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Teléfono</label><input id="seg-add-telefono" placeholder="+57 300 000 0000" style="'+inp+'">'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Capital con el que trabaja <span style="color:#6B7280;">(opcional)</span></label><input id="seg-add-capital" placeholder="Ej. 5.000 USD" style="'+inp+'">'
+        + '<div id="seg-add-msg" style="font-size:12.5px;color:#f87171;min-height:16px;margin-bottom:6px;"></div>'
+        + '<div style="display:flex;gap:10px;"><button onclick="guardarNuevoSeguimiento()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Agregar</button><button onclick="cerrarModalSeguimiento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button></div>';
+      $('modal-seguimiento-content').innerHTML = html;
+      $('modal-seguimiento').style.display = 'flex';
+      setTimeout(function(){ var e = $('seg-add-email'); if (e) e.focus(); }, 50);
+    };
+    window.cerrarModalSeguimiento = function(){ $('modal-seguimiento').style.display = 'none'; };
+    window.guardarNuevoSeguimiento = function(){
+      var email = ($('seg-add-email').value || '').trim();
+      var msg = $('seg-add-msg');
+      if (!email || email.indexOf('@') < 0){ msg.textContent = 'Pon un correo válido.'; return; }
+      var datos = { lead_email: email, nombre: ($('seg-add-nombre').value||'').trim(), telefono: ($('seg-add-telefono').value||'').trim(), capital: ($('seg-add-capital').value||'').trim(), fuente: 'manual' };
+      msg.style.color = '#9CA3AF'; msg.textContent = 'Guardando…';
+      apiPost('crm_seguimiento_agregar', datos).then(function(res){
+        if (res.ok){ cerrarModalSeguimiento(); cargarSeguimiento(); }
+        else { msg.style.color = '#f87171'; msg.textContent = res.error || 'No se pudo agregar'; }
+      }).catch(function(err){ msg.style.color = '#f87171'; msg.textContent = 'Error: ' + (err&&err.message?err.message:err); });
     };
 // ============================================================
 // REEMPLAZA tu función window.exportarWAPI EN EL CRM por esta. (v4)
