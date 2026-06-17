@@ -37,23 +37,23 @@
     .login-error { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.3); border-radius: 10px; padding: 12px 14px; color: #FF6B6B; font-size: 13.5px; margin-bottom: 16px; display: none; }
     .login-error.show { display: block; }
     .app { display: none; min-height: 100vh; }
-    .app.show { display: block; }
-    .app-nav { background: rgba(11,17,49,0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(245,184,0,0.15); padding: 12px 20px; position: sticky; top: 0; z-index: 100; }
-    .app-nav-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .app.show { display: flex; align-items: stretch; }
+    .app-nav { background: rgba(11,17,49,0.95); backdrop-filter: blur(10px); border-right: 1px solid rgba(245,184,0,0.15); padding: 18px 14px; position: sticky; top: 0; height: 100vh; width: 230px; flex-shrink: 0; overflow-y: auto; z-index: 100; }
+    .app-nav-inner { max-width: none; margin: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 18px; height: 100%; }
     .app-logo { display: flex; align-items: center; gap: 10px; font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; letter-spacing: 1.5px; }
     .app-logo img { width: 32px; height: 32px; border-radius: 7px; box-shadow: 0 2px 8px rgba(245,184,0,0.3); }
     .app-logo .accent { color: #F5B800; }
-    .app-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+    .app-tabs { display: flex; flex-direction: column; gap: 4px; flex: 1; }
     .app-tabs::-webkit-scrollbar { display: none; }
-    .app-tab { padding: 8px 14px; background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; font-family: inherit; white-space: nowrap; transition: all 0.18s; }
+    .app-tab { padding: 10px 14px; background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 8px; font-family: inherit; white-space: nowrap; transition: all 0.18s; text-align: left; width: 100%; }
     .app-tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
     .app-tab.active { color: #F5B800; background: rgba(245,184,0,0.1); border-color: rgba(245,184,0,0.3); }
-    .user-info { display: flex; align-items: center; gap: 10px; font-size: 12px; color: rgba(255,255,255,0.7); }
+    .user-info { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: 12px; color: rgba(255,255,255,0.7); border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; word-break: break-all; }
     .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #F5B800, #D49A00); display: flex; align-items: center; justify-content: center; color: #0B1131; font-weight: 900; font-size: 13px; }
     .user-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .btn-logout { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit; transition: all 0.18s; }
     .btn-logout:hover { color: #fff; border-color: #FF6B6B; }
-    .app-main { max-width: 1400px; margin: 0 auto; padding: 28px 20px; }
+    .app-main { flex: 1; min-width: 0; margin: 0; padding: 28px; }
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px; }
     .stat-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px 20px; transition: border-color 0.2s, background 0.2s; }
     .stat-card:hover { border-color: rgba(245,184,0,0.3); }
@@ -96,8 +96,12 @@
     .detail-grid .item .lbl { font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 3px; }
     .detail-grid .item .val { font-size: 14px; color: #fff; font-weight: 500; word-break: break-word; }
     @media (max-width: 768px) {
-      .app-nav-inner { flex-wrap: wrap; gap: 10px; }
-      .app-tabs { order: 3; width: 100%; }
+      .app.show { flex-direction: column; }
+      .app-nav { width: 100%; height: auto; position: sticky; top: 0; border-right: none; border-bottom: 1px solid rgba(245,184,0,0.15); padding: 12px 14px; }
+      .app-nav-inner { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; height: auto; }
+      .app-tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; order: 3; width: 100%; flex: none; }
+      .app-tab { width: auto; }
+      .user-info { flex-direction: row; align-items: center; border-top: none; padding-top: 0; word-break: normal; }
       .app-main { padding: 18px 14px; }
       .stat-card .value { font-size: 24px; }
       .stat-card { padding: 14px 16px; }
