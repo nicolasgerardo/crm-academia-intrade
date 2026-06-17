@@ -687,7 +687,7 @@
       var cuerpo = lista.length === 0
         ? '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay leads en esta sección.</div>'
         : lista.map(tarjetaLead).join('');
-      $('misleads-lista').innerHTML = avisoHtml + '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + misLeadsCache.length + ' de ' + max + ' cupos usados</div>' + barra + cuerpo;
+      $('misleads-lista').innerHTML = avisoHtml + '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + grupos.por_contactar.length + ' de ' + max + ' cupos por contactar</div>' + barra + cuerpo;
     }
     window.compartirLinkVIP = function(leadEmail, grupo){ var lead = (misLeadsCache || []).filter(function(l){ return String(l.lead_email)===String(leadEmail); })[0]; abrirGeneradorBoletos(leadEmail, grupo, lead); };
     var boletoLeadOrigen = '', boletoGrupo = '', boletoLeadDatos = null;
