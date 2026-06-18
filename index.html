@@ -701,7 +701,7 @@
       var botonesContacto = '';
       if (wa) botonesContacto += '<button onclick="waLead(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">&#128172; WhatsApp</button>';
       if (tel) botonesContacto += '<a href="tel:' + String(tel).replace(/[^0-9+]/g,'') + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">&#128222; Llamar</a>';
-      return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;"><div><div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div><div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' + (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + (misLeadsCampania ? ' · Campaña: ' + escapeHtml(misLeadsCampania) : '') + '</div>' : '') + '</div><span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto + '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">No respondió</button><button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Generar boleto</button></div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + botonesEstadoLead(L) + '</div></div>';
+      return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px;margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;"><div><div style="font-weight:700;font-size:16px;">' + escapeHtml(nombre) + '</div><div style="font-size:12.5px;color:#9CA3AF;">' + escapeHtml(L.lead_email) + (tel ? ' · ' + escapeHtml(tel) : '') + '</div>' + (L.grupo ? '<div style="font-size:11px;color:#6B7280;margin-top:2px;">Grupo: ' + escapeHtml(L.grupo) + (misLeadsCampania ? ' · Campaña: ' + escapeHtml(misLeadsCampania) : '') + '</div>' : '') + '</div><span style="font-size:11px;font-weight:700;background:' + estadoColor + '22;color:' + estadoColor + ';padding:3px 10px;border-radius:100px;white-space:nowrap;">' + escapeHtml(etiquetaEstado(L.estado)) + intentosTxt + '</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + botonesContacto + '<button onclick="marcarNoRespondio(\'' + escapeHtml(L.lead_email) + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">No respondió</button><button onclick="compartirLinkVIP(\'' + escapeHtml(L.lead_email) + '\',\'' + escapeHtml(L.grupo||'') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.4);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Generar boleto</button></div><div style="display:block;">' + casillasMarcasLead(L) + '</div></div>';
     }
     function renderMisLeads(max, avisoHtml){
       misLeadsMax = max; avisoHtml = avisoHtml || ''; misLeadsAviso = avisoHtml;
@@ -795,34 +795,50 @@
       document.querySelectorAll('.btn-copy-boleto').forEach(function(btn){ btn.addEventListener('click', function(){ var b = boletosResultado[parseInt(btn.dataset.k,10)]; navigator.clipboard.writeText(b.link_pago).then(function(){ btn.textContent = '¡Copiado!'; setTimeout(function(){ btn.textContent = 'Copiar link'; }, 1500); }).catch(function(){ prompt('Copia el link:', b.link_pago); }); }); });
     }
     window.marcarNoRespondio = function(leadEmail){ apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){ if (res.ok){ if (res.liberado) alert(res.mensaje || 'Lead liberado al pool'); else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } }); };
-    // Botones de estado para Mis Leads (reemplazan el desplegable). Salen de LEAD_ESTADOS_CACHE.
-    function botonesEstadoLead(L){
-      var leadEmailEsc = escapeHtml(L.lead_email);
-      return (LEAD_ESTADOS_CACHE || []).filter(function(e){ return e.val !== 'no_respondio'; }).map(function(e){
-        var actual = (L.estado === e.val);
-        var estilo = actual
-          ? 'background:#F5B800;color:#0B1131;border:1px solid #F5B800;font-weight:700;'
-          : 'background:rgba(255,255,255,0.05);color:#E5E7EB;border:1px solid rgba(255,255,255,0.15);';
-        return '<button onclick="setEstadoLead(\'' + leadEmailEsc + '\',\'' + e.val + '\')"' + (actual ? ' disabled' : '') +
-          ' style="' + estilo + 'padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12px;">' +
-          (actual ? '✓ ' : '') + escapeHtml(e.label) + '</button>';
+    // Marcas múltiples para Mis Leads: el Titán marca TODO lo que aplique al cliente.
+    function casillasMarcasLead(L){
+      var leadEsc = escapeHtml(L.lead_email);
+      var marcasActuales = {};
+      if (L.marcas) String(L.marcas).split(',').forEach(function(m){ var k = m.trim(); if (k) marcasActuales[k] = true; });
+      else if (L.estado && L.estado !== 'no_contactado' && L.estado !== 'no_respondio') marcasActuales[L.estado] = true;
+      var opciones = (LEAD_ESTADOS_CACHE || []).filter(function(e){ return e.val !== 'no_respondio' && e.val !== 'no_contactado'; });
+      var cbs = opciones.map(function(e){
+        var on = marcasActuales[e.val];
+        return '<label style="display:inline-flex;align-items:center;gap:6px;background:' + (on ? 'rgba(245,184,0,0.15)' : 'rgba(255,255,255,0.05)') + ';border:1px solid ' + (on ? 'rgba(245,184,0,0.45)' : 'rgba(255,255,255,0.12)') + ';padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;color:#E5E7EB;"><input type="checkbox" class="marca-cb" data-lead="' + leadEsc + '" value="' + e.val + '"' + (on ? ' checked' : '') + '> ' + escapeHtml(e.label) + '</label>';
       }).join('');
+      return '<div style="font-size:11px;color:#9CA3AF;margin-bottom:6px;">Marca todo lo que aplique a este cliente (puedes elegir varias):</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">' + cbs + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        + '<button onclick="setMarcasLead(\'' + leadEsc + '\')" style="background:#F5B800;color:#0B1131;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Guardar marcas</button>'
+        + '<button onclick="referidoLead(\'' + leadEsc + '\')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button>'
+        + '</div>';
     }
+    window.setMarcasLead = function(leadEmail){
+      var cbs = document.querySelectorAll('.marca-cb[data-lead="' + leadEmail + '"]');
+      var marcas = [];
+      cbs.forEach(function(cb){ if (cb.checked) marcas.push(cb.value); });
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: marcas }).then(function(res){
+        if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+    window.referidoLead = function(leadEmail){
+      window.modalInput({
+        titulo: 'Agregar referido',
+        descripcion: 'Guarda el referido que te dio este lead. Queda en sus notas y te llega aviso por Telegram.',
+        label: 'Nombre y teléfono del referido',
+        placeholder: 'Ej. Ana Pérez +57 300 000 0000',
+        obligatorio: true,
+        textoBoton: 'Guardar referido',
+        onOk: function(ref){
+          apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, referido: ref }).then(function(res){
+            if (res.ok){ alert('Referido guardado.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
+          }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+        }
+      });
+    };
     window.setEstadoLead = function(leadEmail, estadoVal){
       if (estadoVal === 'no_respondio'){ return window.marcarNoRespondio(leadEmail); }
-      if (estadoVal === 'acompanante'){
-        return window.modalInput({
-          titulo: 'Marcar como acompañante',
-          label: '¿De quién es acompañante?',
-          placeholder: 'Nombre o correo del lead principal',
-          obligatorio: true,
-          textoBoton: 'Guardar',
-          onOk: function(dq){
-            apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: estadoVal, acompanante_de: dq }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
-          }
-        });
-      }
-      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: estadoVal }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: [estadoVal] }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
     };
     var confCache = [];
     var titanesAsignables = [];
