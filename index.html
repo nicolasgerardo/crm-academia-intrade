@@ -416,6 +416,7 @@
   <div id="modal-detalle" class="modal-overlay" onclick="if(event.target===this)cerrarModal()"><div class="modal"><button class="close" onclick="cerrarModal()">&times;</button><div id="modal-content"></div></div></div>
   <div id="modal-seguimiento" class="modal-overlay" onclick="if(event.target===this)cerrarModalSeguimiento()" style="display:none;"><div class="modal" style="max-width:460px;"><button class="close" onclick="cerrarModalSeguimiento()">&times;</button><div id="modal-seguimiento-content"></div></div></div>
   <div id="modal-input" class="modal-overlay" onclick="if(event.target===this)cerrarModalInput()" style="display:none;"><div class="modal" style="max-width:440px;"><button class="close" onclick="cerrarModalInput()">&times;</button><div id="modal-input-content"></div></div></div>
+  <div id="modal-referido" class="modal-overlay" onclick="if(event.target===this)cerrarModalReferido()" style="display:none;"><div class="modal" style="max-width:440px;"><button class="close" onclick="cerrarModalReferido()">&times;</button><div id="modal-referido-content"></div></div></div>
   <script>
   (function() {
     'use strict';
@@ -821,20 +822,44 @@
         if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
       }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
     };
+    var referidoDe = '', referidoGrupo = '', referidoCampania = '';
     window.referidoLead = function(leadEmail){
-      window.modalInput({
-        titulo: 'Agregar referido',
-        descripcion: 'Guarda el referido que te dio este lead. Queda en sus notas y te llega aviso por Telegram.',
-        label: 'Nombre y teléfono del referido',
-        placeholder: 'Ej. Ana Pérez +57 300 000 0000',
-        obligatorio: true,
-        textoBoton: 'Guardar referido',
-        onOk: function(ref){
-          apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, referido: ref }).then(function(res){
-            if (res.ok){ alert('Referido guardado.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
-          }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
-        }
-      });
+      var L = (misLeadsCache || []).filter(function(l){ return String(l.lead_email) === String(leadEmail); })[0] || {};
+      referidoDe = leadEmail; referidoGrupo = L.grupo || ''; referidoCampania = L.campania_id || '';
+      var refNombre = (L.nombre || leadEmail);
+      var defInd = (referidoGrupo === 'europa') ? '+34' : '+57';
+      var indOpts = PAISES_INDICATIVO.map(function(p){ return '<option value="' + p.c + '"' + (p.c === defInd ? ' selected' : '') + '>' + p.n + ' (' + p.c + ')</option>'; }).join('');
+      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;box-sizing:border-box;font-size:14px;';
+      var html = '<h2 style="margin:0 0 6px;font-size:20px;">Agregar referido</h2>'
+        + '<p style="color:#9CA3AF;font-size:13px;margin:0 0 18px;">Queda guardado como lead para agendarlo, marcado como <b style="color:#F5B800;">invitado de ' + escapeHtml(refNombre) + '</b>.</p>'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre *</label>'
+        + '<input id="ref-nombre" placeholder="Nombre del referido" style="' + inp + 'margin-bottom:12px;">'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Teléfono *</label>'
+        + '<div style="display:flex;gap:6px;margin-bottom:12px;"><select id="ref-ind" style="width:130px;padding:10px 4px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">' + indOpts + '</select>'
+        + '<input id="ref-tel" placeholder="Número" style="' + inp + '"></div>'
+        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo (opcional)</label>'
+        + '<input id="ref-email" placeholder="correo@ejemplo.com" style="' + inp + 'margin-bottom:6px;">'
+        + '<div id="ref-msg" style="font-size:12.5px;color:#f87171;min-height:16px;margin:6px 0;"></div>'
+        + '<div style="display:flex;gap:10px;margin-top:8px;"><button onclick="guardarReferido()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar referido</button><button onclick="cerrarModalReferido()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button></div>';
+      $('modal-referido-content').innerHTML = html;
+      $('modal-referido').style.display = 'flex';
+      setTimeout(function(){ var f = $('ref-nombre'); if (f) f.focus(); }, 50);
+    };
+    window.cerrarModalReferido = function(){ $('modal-referido').style.display = 'none'; };
+    window.guardarReferido = function(){
+      var nombre = $('ref-nombre').value.trim();
+      var ind = $('ref-ind').value;
+      var num = $('ref-tel').value.replace(/[^0-9]/g, '');
+      var email = $('ref-email').value.trim();
+      if (!nombre){ $('ref-msg').textContent = 'El nombre es obligatorio.'; return; }
+      if (num.length < 7){ $('ref-msg').textContent = 'Pon un teléfono válido.'; return; }
+      var indDig = ind.replace('+', '');
+      if (num.indexOf(indDig) === 0 && num.length > indDig.length + 5) num = num.substring(indDig.length);
+      var telefono = ind + num;
+      apiPost('crm_agregar_referido', { referente_email: referidoDe, nombre: nombre, telefono: telefono, email: email, grupo: referidoGrupo, campania_id: referidoCampania }).then(function(res){
+        if (res.ok){ cerrarModalReferido(); alert('Referido agregado y agendado como lead.'); cargarMisLeads(); }
+        else { $('ref-msg').textContent = res.error || 'Error'; }
+      }).catch(function(err){ $('ref-msg').textContent = 'Error: ' + (err && err.message ? err.message : err); });
     };
     window.setEstadoLead = function(leadEmail, estadoVal){
       if (estadoVal === 'no_respondio'){ return window.marcarNoRespondio(leadEmail); }
