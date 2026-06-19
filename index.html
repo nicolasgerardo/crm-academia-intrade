@@ -804,6 +804,17 @@
       document.querySelectorAll('.btn-copy-boleto').forEach(function(btn){ btn.addEventListener('click', function(){ var b = boletosResultado[parseInt(btn.dataset.k,10)]; navigator.clipboard.writeText(b.link_pago).then(function(){ btn.textContent = '¡Copiado!'; setTimeout(function(){ btn.textContent = 'Copiar link'; }, 1500); }).catch(function(){ prompt('Copia el link:', b.link_pago); }); }); });
     }
     window.marcarNoRespondio = function(leadEmail){ apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio', campania_id: campaniaDeLead(leadEmail) }).then(function(res){ if (res.ok){ if (res.liberado) alert(res.mensaje || 'Lead liberado al pool'); else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } }); };
+    // Guarda las marcas AL INSTANTE cuando se hace clic en cualquier casilla,
+    // sin necesidad de pulsar "Guardar marcas". Recoge TODAS las casillas
+    // marcadas de ese lead y las envía igual que el botón que sí funciona.
+    window.guardarMarcaInstantanea = function(leadEmail){
+      var cbs = document.querySelectorAll('.marca-cb[data-lead="' + leadEmail + '"]');
+      var marcas = [];
+      cbs.forEach(function(cb){ if (cb.checked) marcas.push(cb.value); });
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: marcas, campania_id: campaniaDeLead(leadEmail) }).then(function(res){
+        if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
     function casillasMarcasLead(L){
       var leadEsc = escapeHtml(L.lead_email);
       var marcasActuales = {};
@@ -812,7 +823,7 @@
       var opciones = (LEAD_ESTADOS_CACHE || []).filter(function(e){ return e.val !== 'no_respondio' && e.val !== 'no_contactado'; });
       var cbs = opciones.map(function(e){
         var on = marcasActuales[e.val];
-        return '<label style="display:inline-flex;align-items:center;gap:6px;background:' + (on ? 'rgba(245,184,0,0.15)' : 'rgba(255,255,255,0.05)') + ';border:1px solid ' + (on ? 'rgba(245,184,0,0.45)' : 'rgba(255,255,255,0.12)') + ';padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;color:#E5E7EB;"><input type="checkbox" class="marca-cb" data-lead="' + leadEsc + '" value="' + e.val + '"' + (on ? ' checked' : '') + '> ' + escapeHtml(e.label) + '</label>';
+        return '<label style="display:inline-flex;align-items:center;gap:6px;background:' + (on ? 'rgba(245,184,0,0.15)' : 'rgba(255,255,255,0.05)') + ';border:1px solid ' + (on ? 'rgba(245,184,0,0.45)' : 'rgba(255,255,255,0.12)') + ';padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;color:#E5E7EB;"><input type="checkbox" class="marca-cb" data-lead="' + leadEsc + '" value="' + e.val + '"' + (on ? ' checked' : '') + ' onchange="guardarMarcaInstantanea(\'' + leadEsc + '\')"> ' + escapeHtml(e.label) + '</label>';
       }).join('');
       return '<div style="font-size:11px;color:#9CA3AF;margin-bottom:6px;">Marca todo lo que aplique a este cliente (puedes elegir varias):</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">' + cbs + '</div>'
