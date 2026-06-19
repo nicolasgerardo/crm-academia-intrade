@@ -652,10 +652,14 @@
     function etiquetaEstado(val){ if (!LEAD_ESTADOS_CACHE) return val; var e = LEAD_ESTADOS_CACHE.filter(function(x){return x.val===val;})[0]; return e ? e.label : val; }
     var misLeadsSubtab = 'por_contactar', misLeadsMax = 5, misLeadsAviso = '';
     function clasificarLead(L){
-      var e = String(L.estado || '');
-      if (e === '' || e === 'no_contactado') return 'por_contactar';
-      if (e.indexOf('vip') >= 0) return 'vip';
-      return 'contactados';
+      var e = String(L.estado || '').trim();
+      var marcas = String(L.marcas || '').trim();
+      // VIP: cualquier señal de cierre VIP (en estado o en marcas)
+      if (e.indexOf('vip') >= 0 || marcas.indexOf('vip') >= 0) return 'vip';
+      // Ya trabajado: tiene marcas, o un estado que no es "virgen"
+      var virgen = (e === '' || e === 'no_contactado');
+      if (marcas !== '' || !virgen) return 'contactados';
+      return 'por_contactar';
     }
     window.setMisLeadsSubtab = function(t){ misLeadsSubtab = t; renderMisLeads(misLeadsMax, misLeadsAviso); };
     var WA_OFFSET_COL = -5;
