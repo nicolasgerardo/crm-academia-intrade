@@ -1027,6 +1027,225 @@
     }
     init();
   })();
-  </script>
+  
+    // ============================================================
+    // SEGUIMIENTO DE CIERRE (high ticket) — funciones de la pestaña
+    // ============================================================
+    var SEG_CACHE = [];
+    var SEG_ESTADOS_FRONT = [
+      { val: 'sin_llamar',        label: 'Sin llamar' },
+      { val: 'llamado',           label: 'Llamado' },
+      { val: 'propuesta_enviada', label: 'Propuesta enviada' },
+      { val: 'cerrado_497',       label: 'Cerrado · $497' },
+      { val: 'cerrado_997',       label: 'Cerrado · $997' },
+      { val: 'perdido',           label: 'Perdido' }
+    ];
+    var SEG_ESTADO_LABEL = {};
+    SEG_ESTADOS_FRONT.forEach(function(e){ SEG_ESTADO_LABEL[e.val] = e.label; });
+    var SEG_CERRADOS = ['cerrado_497','cerrado_997','perdido'];
+
+    window.cargarSeguimiento = function(){
+      var cont = document.getElementById('seg-lista');
+      if (cont) cont.innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
+      // Mostrar el botón "Importar inscritos" solo a admin
+      var btnImp = document.getElementById('seg-btn-importar');
+      if (btnImp) btnImp.style.display = (userRol === 'admin') ? '' : 'none';
+      apiPost('crm_seguimiento_listar', {}).then(function(res){
+        if (!res || !res.ok) {
+          if (cont) cont.innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(res && res.error ? res.error : 'no se pudo cargar') + '</div>';
+          return;
+        }
+        SEG_CACHE = res.data || [];
+        renderSeguimiento();
+      }).catch(function(err){
+        if (cont) cont.innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(err && err.message ? err.message : err) + '</div>';
+      });
+    };
+
+    window.renderSeguimiento = function(){
+      var cont = document.getElementById('seg-lista');
+      if (!cont) return;
+      var q = (document.getElementById('seg-busqueda') || {}).value || '';
+      q = q.toLowerCase().trim();
+      var fEstado = (document.getElementById('seg-filtro-estado') || {}).value || '';
+      var soloInteres = !!(document.getElementById('seg-solo-interes') || {}).checked;
+      var soloHoy = !!(document.getElementById('seg-solo-hoy') || {}).checked;
+      var finDeHoy = new Date(); finDeHoy.setHours(23,59,59,999);
+
+      var lista = (SEG_CACHE || []).filter(function(p){
+        if (fEstado && p.estado_cierre !== fEstado) return false;
+        if (soloInteres && String(p.fuente||'').toLowerCase().indexOf('landing') < 0) return false;
+        if (soloHoy) {
+          if (SEG_CERRADOS.indexOf(p.estado_cierre) >= 0) return false;
+          if (!p.proximo_contacto) return false;
+          var pc = new Date(p.proximo_contacto);
+          if (isNaN(pc.getTime()) || pc.getTime() > finDeHoy.getTime()) return false;
+        }
+        if (q) {
+          var hay = ((p.nombre||'') + ' ' + (p.lead_email||'') + ' ' + (p.telefono||'')).toLowerCase().indexOf(q) >= 0;
+          if (!hay) return false;
+        }
+        return true;
+      });
+
+      var badge = document.getElementById('seg-count');
+      if (badge) badge.textContent = lista.length;
+
+      if (!lista.length) {
+        cont.innerHTML = '<div style="color:#9CA3AF;padding:20px 0;">No hay prospectos que coincidan con el filtro.</div>';
+        return;
+      }
+
+      var html = '';
+      lista.forEach(function(p){
+        var esInteresado = String(p.fuente||'').toLowerCase().indexOf('landing') >= 0;
+        var cerrado = SEG_CERRADOS.indexOf(p.estado_cierre) >= 0;
+        var emailEsc = escapeHtml(p.lead_email);
+        var pcTxt = '';
+        if (p.proximo_contacto) {
+          var d = new Date(p.proximo_contacto);
+          if (!isNaN(d.getTime())) pcTxt = d.toLocaleString('es-CO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        }
+        var opciones = SEG_ESTADOS_FRONT.map(function(e){
+          return '<option value="' + e.val + '"' + (e.val === p.estado_cierre ? ' selected' : '') + '>' + escapeHtml(e.label) + '</option>';
+        }).join('');
+
+        html += '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:14px;margin-bottom:10px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
+          + '<div style="min-width:200px;">'
+          + '<div style="font-weight:700;color:#fff;font-size:15px;">' + (esInteresado ? '🔥 ' : '') + escapeHtml(p.nombre || p.lead_email) + '</div>'
+          + '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(p.lead_email) + (p.telefono ? ' · ' + escapeHtml(p.telefono) : '') + '</div>'
+          + (p.grupo ? '<div style="font-size:11px;color:#60a5fa;margin-top:2px;">' + escapeHtml(p.grupo) + '</div>' : '')
+          + (p.titan_asignado ? '<div style="font-size:11px;color:#C9CCD6;margin-top:2px;">Titán: ' + escapeHtml(p.titan_asignado) + '</div>' : '<div style="font-size:11px;color:#F5B800;margin-top:2px;">Sin asignar</div>')
+          + '</div>'
+          + '<div style="text-align:right;">'
+          + (cerrado && p.monto_usd ? '<div style="font-weight:800;color:#34d399;font-size:16px;">$' + p.monto_usd + '</div>' : '')
+          + (pcTxt ? '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">Próx: ' + escapeHtml(pcTxt) + '</div>' : '')
+          + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">'
+          + '<select onchange="cambiarEstadoSeguimiento(\'' + emailEsc + '\', this.value)" style="background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:6px 10px;font-size:12px;">' + opciones + '</select>'
+          + '<button onclick="abrirDetalleSeguimiento(\'' + emailEsc + '\')" style="background:rgba(245,184,0,0.15);color:#F5B800;border:1px solid rgba(245,184,0,0.35);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">Detalle / notas</button>'
+          + '</div>'
+          + (p.notas ? '<div style="font-size:12px;color:#C9CCD6;margin-top:8px;white-space:pre-wrap;">' + escapeHtml(p.notas) + '</div>' : '')
+          + '</div>';
+      });
+      cont.innerHTML = html;
+    };
+
+    // Cambio rápido de estado desde el <select> de la tarjeta
+    window.cambiarEstadoSeguimiento = function(leadEmail, estado){
+      apiPost('crm_seguimiento_actualizar', { lead_email: leadEmail, estado: estado }).then(function(res){
+        if (res && res.ok) {
+          // Actualizar cache local y re-render sin recargar todo
+          var p = (SEG_CACHE || []).filter(function(x){ return String(x.lead_email) === String(leadEmail); })[0];
+          if (p) {
+            p.estado_cierre = estado;
+            if (estado === 'cerrado_497') { p.monto_usd = 497; }
+            else if (estado === 'cerrado_997') { p.monto_usd = 997; }
+            else if (estado === 'perdido') { p.monto_usd = 0; }
+          }
+          renderSeguimiento();
+        } else {
+          alert('Error: ' + (res && res.error ? res.error : 'no se pudo actualizar'));
+        }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+
+    // Modal de detalle: próximo contacto + notas + estado
+    window.abrirDetalleSeguimiento = function(leadEmail){
+      var p = (SEG_CACHE || []).filter(function(x){ return String(x.lead_email) === String(leadEmail); })[0];
+      if (!p) return;
+      var emailEsc = escapeHtml(p.lead_email);
+      var pcVal = '';
+      if (p.proximo_contacto) {
+        var d = new Date(p.proximo_contacto);
+        if (!isNaN(d.getTime())) {
+          // formato para datetime-local: YYYY-MM-DDTHH:MM
+          var z = function(n){ return (n<10?'0':'') + n; };
+          pcVal = d.getFullYear() + '-' + z(d.getMonth()+1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes());
+        }
+      }
+      var opciones = SEG_ESTADOS_FRONT.map(function(e){
+        return '<option value="' + e.val + '"' + (e.val === p.estado_cierre ? ' selected' : '') + '>' + escapeHtml(e.label) + '</option>';
+      }).join('');
+      var c = document.getElementById('modal-seguimiento-content');
+      c.innerHTML = '<h3 style="margin:0 0 4px;color:#fff;">' + escapeHtml(p.nombre || p.lead_email) + '</h3>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">' + escapeHtml(p.lead_email) + (p.telefono ? ' · ' + escapeHtml(p.telefono) : '') + '</div>'
+        + '<label style="display:block;font-size:12px;color:#C9CCD6;margin-bottom:4px;">Estado</label>'
+        + '<select id="seg-d-estado" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:12px;">' + opciones + '</select>'
+        + '<label style="display:block;font-size:12px;color:#C9CCD6;margin-bottom:4px;">Próximo contacto</label>'
+        + '<input id="seg-d-proximo" type="datetime-local" value="' + pcVal + '" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:12px;">'
+        + '<label style="display:block;font-size:12px;color:#C9CCD6;margin-bottom:4px;">Notas</label>'
+        + '<textarea id="seg-d-notas" rows="4" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:14px;resize:vertical;">' + escapeHtml(p.notas || '') + '</textarea>'
+        + '<button onclick="guardarDetalleSeguimiento(\'' + emailEsc + '\')" style="width:100%;background:#F5B800;color:#0B1131;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">Guardar</button>';
+      document.getElementById('modal-seguimiento').style.display = 'flex';
+    };
+
+    window.guardarDetalleSeguimiento = function(leadEmail){
+      var estado = (document.getElementById('seg-d-estado') || {}).value || '';
+      var proximo = (document.getElementById('seg-d-proximo') || {}).value || '';
+      var notas = (document.getElementById('seg-d-notas') || {}).value || '';
+      var body = { lead_email: leadEmail, estado: estado, notas: notas };
+      body.proximo_contacto = proximo ? new Date(proximo).toISOString() : '';
+      apiPost('crm_seguimiento_actualizar', body).then(function(res){
+        if (res && res.ok) { cerrarModalSeguimiento(); cargarSeguimiento(); }
+        else { alert('Error: ' + (res && res.error ? res.error : 'no se pudo guardar')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+
+    window.cerrarModalSeguimiento = function(){
+      var m = document.getElementById('modal-seguimiento');
+      if (m) m.style.display = 'none';
+    };
+
+    // Alta manual de prospecto
+    window.abrirAgregarSeguimiento = function(){
+      var c = document.getElementById('modal-seguimiento-content');
+      c.innerHTML = '<h3 style="margin:0 0 14px;color:#fff;">Agregar prospecto</h3>'
+        + '<input id="seg-a-nombre" placeholder="Nombre" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:10px;">'
+        + '<input id="seg-a-email" placeholder="Correo *" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:10px;">'
+        + '<input id="seg-a-tel" placeholder="Teléfono" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:10px;">'
+        + '<input id="seg-a-capital" placeholder="Capital (opcional)" style="width:100%;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px;margin-bottom:14px;">'
+        + '<button onclick="guardarNuevoSeguimiento()" style="width:100%;background:#F5B800;color:#0B1131;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">Agregar</button>';
+      document.getElementById('modal-seguimiento').style.display = 'flex';
+    };
+
+    window.guardarNuevoSeguimiento = function(){
+      var email = (document.getElementById('seg-a-email') || {}).value || '';
+      email = email.trim();
+      if (!email || email.indexOf('@') < 0) { alert('Pon un correo válido'); return; }
+      var body = {
+        lead_email: email,
+        nombre: (document.getElementById('seg-a-nombre') || {}).value || '',
+        telefono: (document.getElementById('seg-a-tel') || {}).value || '',
+        capital: (document.getElementById('seg-a-capital') || {}).value || ''
+      };
+      apiPost('crm_seguimiento_agregar', body).then(function(res){
+        if (res && res.ok) { cerrarModalSeguimiento(); cargarSeguimiento(); }
+        else { alert('Error: ' + (res && res.error ? res.error : 'no se pudo agregar')); }
+      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
+    };
+
+    // Importar inscritos del webinar (solo admin)
+    window.importarInscritosSeguimiento = function(){
+      if (!confirm('¿Importar los inscritos del webinar al pipeline de seguimiento?')) return;
+      var btn = document.getElementById('seg-btn-importar');
+      if (btn) { btn.disabled = true; btn.textContent = 'Importando…'; }
+      apiPost('crm_seguimiento_importar', {}).then(function(res){
+        if (btn) { btn.disabled = false; btn.textContent = 'Importar inscritos'; }
+        if (res && res.ok) {
+          alert('Importados: ' + (res.importados || 0) + ' · Ya estaban: ' + (res.ya_estaban || 0));
+          cargarSeguimiento();
+        } else {
+          alert('Error: ' + (res && res.error ? res.error : 'no se pudo importar'));
+        }
+      }).catch(function(err){
+        if (btn) { btn.disabled = false; btn.textContent = 'Importar inscritos'; }
+        alert('Error: ' + (err && err.message ? err.message : err));
+      });
+    };
+
+</script>
 </body>
 </html>
