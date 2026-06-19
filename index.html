@@ -221,6 +221,7 @@
             <option value="sin_contactar_wa">Sin contactar</option>
           </select>
         </div>
+        <div id="conf-lista"><div style="color:#9CA3AF;">Cargando…</div></div>
       </section>
       <section id="tab-seguimiento" class="tab-content" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -629,13 +630,13 @@
       var tzLabels = { '-05:00':'hora Colombia', '-06:00':'hora México', '-03:00':'hora Argentina', '+02:00':'hora Europa Central', '+01:00':'hora España', '-04:00':'hora Venezuela' }; var tzTxt = tzInput && tzLabels[tzInput.value] ? ' (' + tzLabels[tzInput.value] + ')' : '';
       var dispFecha = $('disp-fecha-' + grupoKey); var dispHora = $('disp-hora-' + grupoKey); if (dispFecha) dispFecha.value = fechaTxt; if (dispHora) dispHora.value = horaTxt + tzTxt;
     };
-    var LEAD_ESTADOS_CACHE = null, misLeadsCache = [], misLeadsCampania = '';
+    var LEAD_ESTADOS_CACHE = null, misLeadsCache = [], misLeadsCampania = '', misLeadsCampaniaId = '';
     function cargarMisLeads() {
       $('misleads-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
       var pasoEstados = LEAD_ESTADOS_CACHE ? Promise.resolve({ ok: true, data: LEAD_ESTADOS_CACHE }) : apiGet('crm_leads_estados');
       pasoEstados.then(function(resE){ if (resE.ok) LEAD_ESTADOS_CACHE = resE.data; return apiPost('crm_mis_leads', {}); }).then(function(res){
         if (!res.ok) { $('misleads-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
-        misLeadsCache = res.data || []; misLeadsCampania = res.campania_nombre || res.campania_id || ''; $('misleads-count').textContent = misLeadsCache.length;
+        misLeadsCache = res.data || []; misLeadsCampania = res.campania_nombre || res.campania_id || ''; misLeadsCampaniaId = res.campania_id || ''; $('misleads-count').textContent = misLeadsCache.length;
         var avisoHtml = '';
         if (res.aviso){ avisoHtml = '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#f59e0b;font-size:13px;">⚠ ' + escapeHtml(res.aviso) + '</div>'; }
         if (res.modo){ var modoTxt = res.modo === 'cerrador' ? 'Estás cerrando ventas (Intrader)' : 'Estás confirmando asistencia (webinar)'; avisoHtml = '<div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Modo actual: <b style="color:#F5B800;">' + modoTxt + '</b></div>' + avisoHtml; }
@@ -651,7 +652,6 @@
       return 'contactados';
     }
     window.setMisLeadsSubtab = function(t){ misLeadsSubtab = t; renderMisLeads(misLeadsMax, misLeadsAviso); };
-    // ── Mensaje WhatsApp personalizado para Mis Leads (se arma aquí, no en el backend) ──
     var WA_OFFSET_COL = -5;
     var WA_OFFSETS = {
       'colombia':-5,'peru':-5,'perú':-5,'ecuador':-5,'panama':-5,'panamá':-5,
@@ -665,7 +665,7 @@
     function paisDesdeGrupo(grupo){
       var g = String(grupo || '').toLowerCase();
       if (g.indexOf('europa') >= 0) return 'españa';
-      return 'colombia'; // latam_bajo / latam_alto: base hora Colombia
+      return 'colombia';
     }
     function horaEventoLocal(pais){
       var p = String(pais || '').toLowerCase().trim();
@@ -683,8 +683,6 @@
       if (!L) return;
       var tel = String(L.whatsapp || L.telefono || '').replace(/[^0-9]/g, '');
       if (tel.length < 8) { alert('Este lead no tiene un número de WhatsApp válido.'); return; }
-      // Generamos el mensaje en el backend: ahí la fecha se calcula por el grupo
-      // del lead (18/19/20 de junio) y la firma sale del rol de la sesión.
       apiPost('crm_whatsapp_confirmar', {
         email: L.lead_email, nombre: L.nombre || '', telefono: tel,
         engagement: L.engagement || '', sexo: L.sexo || '', titan_nombre: userNombre || ''
@@ -795,8 +793,7 @@
       document.querySelectorAll('.btn-wa-boleto').forEach(function(btn){ btn.addEventListener('click', function(){ var b = boletosResultado[parseInt(btn.dataset.k,10)]; var primerNombre = (b.nombre || '').split(' ')[0]; var msg = '¡Hola ' + primerNombre + '! 🎉 Aquí tienes tu acceso para asegurar tu cupo VIP al evento. Solo entra a este enlace y completa tu registro: ' + b.link_pago + '\n\n¡Nos vemos adentro!'; var tel = String(b.telefono || '').replace(/[^0-9]/g,''); var url = tel ? 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg); window.open(url, '_blank'); }); });
       document.querySelectorAll('.btn-copy-boleto').forEach(function(btn){ btn.addEventListener('click', function(){ var b = boletosResultado[parseInt(btn.dataset.k,10)]; navigator.clipboard.writeText(b.link_pago).then(function(){ btn.textContent = '¡Copiado!'; setTimeout(function(){ btn.textContent = 'Copiar link'; }, 1500); }).catch(function(){ prompt('Copia el link:', b.link_pago); }); }); });
     }
-    window.marcarNoRespondio = function(leadEmail){ apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio' }).then(function(res){ if (res.ok){ if (res.liberado) alert(res.mensaje || 'Lead liberado al pool'); else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } }); };
-    // Marcas múltiples para Mis Leads: el Titán marca TODO lo que aplique al cliente.
+    window.marcarNoRespondio = function(leadEmail){ apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, estado: 'no_respondio', campania_id: misLeadsCampaniaId }).then(function(res){ if (res.ok){ if (res.liberado) alert(res.mensaje || 'Lead liberado al pool'); else if (res.restantes != null) alert('Marcado. Quedan ' + res.restantes + ' intento(s) antes de liberarlo.'); cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } }); };
     function casillasMarcasLead(L){
       var leadEsc = escapeHtml(L.lead_email);
       var marcasActuales = {};
@@ -818,7 +815,7 @@
       var cbs = document.querySelectorAll('.marca-cb[data-lead="' + leadEmail + '"]');
       var marcas = [];
       cbs.forEach(function(cb){ if (cb.checked) marcas.push(cb.value); });
-      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: marcas }).then(function(res){
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: marcas, campania_id: misLeadsCampaniaId }).then(function(res){
         if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); }
       }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
     };
@@ -863,373 +860,8 @@
     };
     window.setEstadoLead = function(leadEmail, estadoVal){
       if (estadoVal === 'no_respondio'){ return window.marcarNoRespondio(leadEmail); }
-      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: [estadoVal] }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
+      apiPost('crm_cambiar_estado_lead', { lead_email: leadEmail, marcas: [estadoVal], campania_id: misLeadsCampaniaId }).then(function(res){ if (res.ok){ cargarMisLeads(); } else { alert('Error: ' + (res.error||'')); } });
     };
-    var confCache = [];
-    var titanesAsignables = [];
-    function cargarConfirmacion() {
-      $('conf-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
-      var pasoTitanes = (userRol === 'admin' && titanesAsignables.length === 0)
-        ? apiGet('crm_titanes_listar').then(function(rt){ if (rt && rt.ok) titanesAsignables = (rt.data || []).filter(function(t){ return t.activo; }); }).catch(function(){})
-        : Promise.resolve();
-      pasoTitanes.then(function(){
-      apiGet('crm_engagement_inscritos', {}).then(function(res){
-        if (!res.ok) { $('conf-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
-        confCache = res.data.rows || []; $('conf-count').textContent = confCache.length;
-        var act = 0, pend = 0, frio = 0, conf = 0;
-        confCache.forEach(function(c){ if (c.engagement === 'activo') act++; else if (c.engagement === 'frio') frio++; else pend++; if (c.confirmacion === 'confirmado') conf++; });
-        $('conf-resumen').innerHTML = tarjetaResumen('🟢 Activos', act, '#34d399') + tarjetaResumen('🟡 Pendientes', pend, '#f59e0b') + tarjetaResumen('🔴 Fríos', frio, '#f87171') + tarjetaResumen('✅ Confirmados', conf, '#F5B800');
-        filtrarConfirmacion();
-      }).catch(function(err){ $('conf-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
-      });
-    }
-    window.filtrarConfirmacion = function() {
-      var q = ($('conf-busqueda').value || '').toLowerCase().trim(); var eng = $('conf-filtro-engagement').value; var grupo = $('conf-filtro-grupo').value; var estado = $('conf-filtro-estado').value;
-      var filtrados = confCache.filter(function(c){
-        if (q && (c.email + ' ' + c.nombre + ' ' + c.apellido + ' ' + c.telefono).toLowerCase().indexOf(q) < 0) return false;
-        if (eng && c.engagement !== eng) return false; if (grupo && c.grupo !== grupo) return false;
-        if (estado === 'sin_confirmar' && c.confirmacion !== 'sin_confirmar') return false; if (estado === 'confirmado' && c.confirmacion !== 'confirmado') return false; if (estado === 'no_asistira' && c.confirmacion !== 'no_asistira') return false;
-        if (estado === 'contactado_wa' && !c.contactado) return false; if (estado === 'sin_contactar_wa' && c.contactado) return false;
-        return true;
-      });
-      if (filtrados.length === 0) { $('conf-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay inscritos que coincidan con los filtros.</div>'; return; }
-      $('conf-lista').innerHTML = filtrados.map(function(c, i){
-        var nombre = ((c.nombre || '') + ' ' + (c.apellido || '')).trim() || c.email;
-        var engBadge = c.engagement === 'activo' ? '<span style="background:rgba(52,211,153,0.15);color:#34d399;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🟢 ACTIVO</span>' : (c.engagement === 'frio' ? '<span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🔴 FRÍO</span>' : '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;">🟡 PENDIENTE</span>');
-        var confBadge = '';
-        if (c.confirmacion === 'confirmado') confBadge = ' <span style="background:rgba(245,184,0,0.15);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">✅ CONFIRMADO</span>'; else if (c.confirmacion === 'no_asistira') confBadge = ' <span style="background:rgba(248,113,113,0.15);color:#f87171;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">NO ASISTIRÁ</span>'; else if (c.confirmacion === 'vip_cerrado') confBadge = ' <span style="background:rgba(245,184,0,0.25);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">⭐ VIP CERRADO</span>';
-        var contactadoBadge = c.contactado ? ' <span style="background:rgba(37,211,102,0.15);color:#25D366;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">📲 CONTACTADO</span>' : '';
-        var emailInfo = c.emails_abiertos > 0 ? '<span style="color:#34d399;font-size:11px;">📧 ' + c.emails_abiertos + ' abierto(s)' + (c.emails_clicks > 0 ? ' · ' + c.emails_clicks + ' clic(s)' : '') + '</span>' : '<span style="color:#f87171;font-size:11px;">📧 Sin abrir</span>';
-        var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
-        var asigCtrl = '';
-        if (userRol === 'admin' && titanesAsignables.length) {
-          var optsT = titanesAsignables.map(function(t){ return '<option value="' + escapeHtml(t.email) + '">' + escapeHtml(t.nombre || t.email) + '</option>'; }).join('');
-          asigCtrl = '<select id="asig-' + i + '" style="padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:12px;"><option value="">Asignar a Titán…</option>' + optsT + '</select><button onclick="asignarLeadTitan(\'' + escapeHtml(c.email) + '\',' + i + ')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">👤 Asignar</button>';
-        }
-        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:10px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;"><div><div style="font-weight:700;font-size:15px;">' + escapeHtml(nombre) + confBadge + contactadoBadge + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(c.email) + (c.telefono ? ' · ' + escapeHtml(c.telefono) : '') + '</div><div style="margin-top:4px;">' + emailInfo + ' · <span style="color:#6B7280;font-size:11px;">Grupo: ' + escapeHtml(c.grupo || '-') + ' · Hace ' + c.dias_desde_registro + ' día(s)</span></div></div><div>' + engBadge + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' + (tel ? '<button onclick="confWhatsApp(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + tel + '\',\'' + c.engagement + '\',\'' + escapeHtml(c.sexo || '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">💬 WhatsApp</button>' : '') + (tel ? '<a href="tel:' + escapeHtml(c.telefono) + '" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">📞 Llamar</a>' : '') + '<button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'confirmado\')" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✅ Confirmar</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'no_asistira\')" style="background:rgba(248,113,113,0.08);color:#f87171;border:1px solid rgba(248,113,113,0.2);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">✗ No asistirá</button><button onclick="confMarcar(\'' + escapeHtml(c.email) + '\',\'vip_cerrado\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">⭐ VIP cerrado</button><button onclick="confReferido(\'' + escapeHtml(c.email) + '\')" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎯 Referido</button><button onclick="confBoletoInvitado(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || 'latam_bajo') + '\')" style="background:rgba(245,184,0,0.12);color:#F5B800;border:1px solid rgba(245,184,0,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">🎟️ Invitado</button><button onclick="confASeguimiento(\'' + escapeHtml(c.email) + '\',\'' + escapeHtml(c.nombre || '') + '\',\'' + escapeHtml(c.apellido || '') + '\',\'' + tel + '\',\'' + escapeHtml(c.grupo || '') + '\')" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">➕ Seguimiento</button>' + asigCtrl + '</div></div>';
-      }).join('');
-    };
-    window.confWhatsApp = function(email, nombre, telefono, engagement, sexo) {
-      apiPost('crm_whatsapp_confirmar', { email: email, nombre: nombre, telefono: telefono, engagement: engagement, sexo: sexo || '', titan_nombre: userNombre || '' }).then(function(res){ if (res.ok && res.link) { window.open(res.link, '_blank'); } else { alert('Error: ' + (res.error || 'No se pudo generar el link')); } });
-    };
-    window.confMarcar = function(email, estado) {
-      if (estado === 'no_asistira') {
-        return window.modalInput({
-          titulo: 'Marcar como “No asistirá”',
-          label: 'Razón (opcional)',
-          placeholder: 'Ej. cambio de planes, no responde…',
-          multilinea: true,
-          textoBoton: 'Guardar',
-          onOk: function(notas){
-            apiPost('crm_marcar_confirmacion', { email: email, estado: estado, notas: notas || '' }).then(function(res){ if (res.ok) { cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
-          }
-        });
-      }
-      apiPost('crm_marcar_confirmacion', { email: email, estado: estado, notas: '' }).then(function(res){ if (res.ok) { cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
-    };
-    window.confReferido = function(email) {
-      window.modalInput({
-        titulo: 'Registrar referido',
-        descripcion: 'Marca a este inscrito como confirmado y guarda el referido que te dio.',
-        label: 'Nombre y teléfono del referido',
-        placeholder: 'Ej. Ana Pérez +57 300 000 0000',
-        obligatorio: true,
-        textoBoton: 'Registrar',
-        onOk: function(referido){
-          apiPost('crm_marcar_confirmacion', { email: email, estado: 'confirmado', referido: referido }).then(function(res){ if (res.ok) { alert('¡Referido registrado! Se notificó por Telegram.'); cargarConfirmacion(); } else { alert('Error: ' + (res.error || '')); } });
-        }
-      });
-    };
-    window.confBoletoInvitado = function(email, nombre, apellido, telefono, grupo) {
-      var leadDatos = { nombre: nombre || '', apellido: apellido || '', telefono: telefono || '', whatsapp: telefono || '', lead_email: email };
-      abrirGeneradorBoletos(email, grupo || 'latam_bajo', leadDatos);
-    };
-    window.confASeguimiento = function(email, nombre, apellido, telefono, grupo){
-      var nombreCompleto = ((nombre||'') + ' ' + (apellido||'')).trim();
-      apiPost('crm_seguimiento_agregar', { lead_email: email, nombre: nombreCompleto, telefono: telefono || '', grupo: grupo || '', fuente: 'webinar' }).then(function(res){
-        if (res.ok){ alert(res.ya_existia ? 'Ya estaba en seguimiento.' : 'Agregado al pipeline de cierre.'); }
-        else { alert('Error: ' + (res.error||'')); }
-      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
-    };
-    window.asignarLeadTitan = function(email, i) {
-      var sel = $('asig-' + i); if (!sel) return;
-      var titanEmail = sel.value;
-      if (!titanEmail) { alert('Elige un Titán de la lista.'); return; }
-      if (!confirm('¿Asignar este lead a ' + titanEmail + '?')) return;
-      apiPost('crm_asignar_lead_titan', { lead_email: email, titan_email: titanEmail }).then(function(res){
-        if (res.ok) { alert('Lead asignado a ' + titanEmail + (res.creado ? ' (nuevo en la campaña)' : '')); cargarConfirmacion(); }
-        else { alert('Error: ' + (res.error || '')); }
-      }).catch(function(err){ alert('Error: ' + (err && err.message ? err.message : err)); });
-    };
-
-    // ====================== MODAL DE ENTRADA GENÉRICO ======================
-    // Reemplaza los prompt() del navegador. opts: { titulo, descripcion,
-    // label, placeholder, valor, multilinea, obligatorio, textoBoton, onOk(valor) }
-    var _modalInputCb = null;
-    window.modalInput = function(opts){
-      opts = opts || {};
-      _modalInputCb = opts.onOk || null;
-      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;box-sizing:border-box;font-size:14px;';
-      var campo = opts.multilinea
-        ? '<textarea id="modal-input-field" rows="3" placeholder="'+escapeHtml(opts.placeholder||'')+'" style="'+inp+'resize:vertical;">'+escapeHtml(opts.valor||'')+'</textarea>'
-        : '<input id="modal-input-field" value="'+escapeHtml(opts.valor||'')+'" placeholder="'+escapeHtml(opts.placeholder||'')+'" style="'+inp+'">';
-      var html = '<h2 style="margin:0 0 4px;font-size:19px;">'+escapeHtml(opts.titulo||'')+'</h2>'
-        + (opts.descripcion ? '<p style="color:#9CA3AF;font-size:13px;margin:0 0 16px;">'+escapeHtml(opts.descripcion)+'</p>' : '<div style="height:12px;"></div>')
-        + (opts.label ? '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">'+escapeHtml(opts.label)+'</label>' : '')
-        + campo
-        + '<div id="modal-input-msg" style="font-size:12.5px;color:#f87171;min-height:16px;margin:6px 0;"></div>'
-        + '<div style="display:flex;gap:10px;"><button onclick="confirmarModalInput('+(opts.obligatorio?'true':'false')+')" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:12px;border-radius:8px;font-weight:700;cursor:pointer;">'+escapeHtml(opts.textoBoton||'Guardar')+'</button><button onclick="cerrarModalInput()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:12px 18px;border-radius:8px;cursor:pointer;">Cancelar</button></div>';
-      $('modal-input-content').innerHTML = html;
-      $('modal-input').style.display = 'flex';
-      setTimeout(function(){ var f = $('modal-input-field'); if (f) f.focus(); }, 50);
-    };
-    window.cerrarModalInput = function(){ $('modal-input').style.display = 'none'; _modalInputCb = null; };
-    window.confirmarModalInput = function(obligatorio){
-      var f = $('modal-input-field'); var val = f ? f.value.trim() : '';
-      if (obligatorio && !val){ $('modal-input-msg').textContent = 'Este campo es obligatorio.'; return; }
-      var cb = _modalInputCb; cerrarModalInput();
-      if (cb) cb(val);
-    };
-
-    // ====================== SEGUIMIENTO DE CIERRE ======================
-    var segCache = [];
-    var segEstados = [];
-    var segEsAdmin = false;
-    var SEG_ETIQUETAS = { sin_llamar:'Sin llamar', llamado:'Llamado', propuesta_enviada:'Propuesta enviada', cerrado_497:'Cerrado · $497', cerrado_997:'Cerrado · $997', perdido:'Perdido' };
-    var SEG_COLOR = { sin_llamar:'#60a5fa', llamado:'#f59e0b', propuesta_enviada:'#a78bfa', cerrado_497:'#34d399', cerrado_997:'#F5B800', perdido:'#f87171' };
-    function cargarSeguimiento(){
-      $('seg-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando…</div>';
-      var btnImp = $('seg-btn-importar'); if (btnImp) btnImp.style.display = (userRol === 'admin') ? '' : 'none';
-      apiGet('crm_seguimiento_metricas', {}).then(function(rm){
-        if (rm && rm.ok){ segEsAdmin = rm.es_admin; pintarSegResumen(rm.data, rm.por_titan); }
-      }).catch(function(){});
-      apiGet('crm_seguimiento_listar', {}).then(function(res){
-        if (!res.ok){ $('seg-lista').innerHTML = '<div style="color:#f87171;">' + escapeHtml(res.error||'Error') + '</div>'; return; }
-        segCache = res.data || []; segEstados = res.estados || []; segEsAdmin = res.es_admin;
-        $('seg-count').textContent = segCache.length;
-        renderSeguimiento();
-      }).catch(function(err){ $('seg-lista').innerHTML = '<div style="color:#f87171;">Error: ' + escapeHtml(String(err&&err.message?err.message:err)) + '</div>'; });
-    }
-    function pintarSegResumen(d, porTitan){
-      if (!d) return;
-      var enPipeline = d.sin_llamar + d.llamado + d.propuesta_enviada;
-      var cerrados = d.cerrado_497 + d.cerrado_997;
-      var html = tarjetaResumen('🔵 En pipeline', enPipeline, '#60a5fa')
-        + tarjetaResumen('📞 Para hoy', d.hoy_pendientes, '#f59e0b')
-        + tarjetaResumen('✅ Cerrados', cerrados, '#34d399')
-        + tarjetaResumen('💵 Ingresos', '$' + (d.ingresos_usd||0), '#F5B800');
-      $('seg-resumen').innerHTML = html;
-    }
-    function fmtFechaHora(iso){ if (!iso) return ''; try { var dt = new Date(iso); return dt.toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) + ' ' + dt.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
-    function isoLocalInput(iso){ if (!iso) return ''; try { var dt = new Date(iso); var off = dt.getTimezoneOffset(); var local = new Date(dt.getTime() - off*60000); return local.toISOString().slice(0,16); } catch(e){ return ''; } }
-    window.renderSeguimiento = function(){
-      var q = ($('seg-busqueda').value||'').toLowerCase().trim();
-      var fEstado = $('seg-filtro-estado').value;
-      var soloHoy = $('seg-solo-hoy').checked;
-      var soloInteres = $('seg-solo-interes') ? $('seg-solo-interes').checked : false;
-      var finHoy = new Date(); finHoy.setHours(23,59,59,999);
-      var cerrados = ['cerrado_497','cerrado_997','perdido'];
-      var filtrados = segCache.filter(function(s){
-        if (q && (s.lead_email+' '+s.nombre+' '+s.telefono).toLowerCase().indexOf(q) < 0) return false;
-        if (fEstado && s.estado_cierre !== fEstado) return false;
-        if (soloInteres && s.fuente !== 'landing') return false;
-        if (soloHoy){
-          if (cerrados.indexOf(s.estado_cierre) >= 0) return false;
-          if (!s.proximo_contacto) return false;
-          var pc = new Date(s.proximo_contacto);
-          if (isNaN(pc.getTime()) || pc.getTime() > finHoy.getTime()) return false;
-        }
-        return true;
-      });
-      if (filtrados.length === 0){ $('seg-lista').innerHTML = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:24px;text-align:center;color:#9CA3AF;">No hay prospectos en seguimiento que coincidan.</div>'; return; }
-      var opcionesEstado = ['sin_llamar','llamado','propuesta_enviada','cerrado_497','cerrado_997','perdido'].map(function(v){ return '<option value="'+v+'">'+SEG_ETIQUETAS[v]+'</option>'; }).join('');
-      $('seg-lista').innerHTML = filtrados.map(function(s, i){
-        var nombre = (s.nombre || '').trim() || s.lead_email;
-        var interesBadge = (s.fuente === 'landing') ? ' <span style="background:rgba(245,184,0,0.18);color:#F5B800;font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;">🔥 INTERESADO</span>' : '';
-        var color = SEG_COLOR[s.estado_cierre] || '#9CA3AF';
-        var wa = String(s.telefono||'').replace(/[^0-9]/g,'');
-        var vencido = '';
-        if (s.proximo_contacto && cerrados.indexOf(s.estado_cierre) < 0){ var pc = new Date(s.proximo_contacto); if (!isNaN(pc.getTime()) && pc.getTime() < Date.now()) vencido = '<span style="color:#f87171;font-size:11px;font-weight:700;margin-left:6px;">⏰ vencido</span>'; }
-        var botones = '';
-        if (wa) botones += '<a href="https://wa.me/'+wa+'" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:rgba(37,211,102,0.15);color:#25D366;border:1px solid rgba(37,211,102,0.3);padding:7px 12px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">WhatsApp</a>';
-        if (s.telefono) botones += '<a href="tel:'+escapeHtml(s.telefono)+'" style="display:inline-flex;align-items:center;gap:5px;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);padding:7px 12px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">Llamar</a>';
-        var capTxt = s.capital ? ('<span style="color:#6B7280;font-size:11px;"> · Capital: '+escapeHtml(s.capital)+'</span>') : '';
-        var fuenteTxt = s.fuente ? ('<span style="color:#6B7280;font-size:11px;"> · '+escapeHtml(s.fuente)+'</span>') : '';
-        var titanTxt = (segEsAdmin && s.titan_asignado) ? ('<div style="font-size:11px;color:#6B7280;margin-top:2px;">Titán: '+escapeHtml(s.titan_asignado)+'</div>') : (segEsAdmin && !s.titan_asignado ? '<div style="font-size:11px;color:#f59e0b;margin-top:2px;">⚠️ Sin asignar</div>' : '');
-        return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:12px;">'
-          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
-          + '<div><div style="font-weight:700;font-size:15px;">'+escapeHtml(nombre)+interesBadge+'</div>'
-          + '<div style="font-size:12px;color:#9CA3AF;margin-top:2px;">'+escapeHtml(s.lead_email)+(s.telefono?' · '+escapeHtml(s.telefono):'')+capTxt+fuenteTxt+'</div>'+titanTxt+'</div>'
-          + '<span style="font-size:11px;font-weight:700;background:'+color+'22;color:'+color+';padding:3px 10px;border-radius:100px;white-space:nowrap;">'+escapeHtml(SEG_ETIQUETAS[s.estado_cierre]||s.estado_cierre)+'</span>'
-          + '</div>'
-          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+botones+'</div>'
-          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-          + '<div><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Estado</label><select id="seg-estado-'+i+'" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);font-size:13px;">'+opcionesEstado+'</select></div>'
-          + '<div><label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Próximo contacto'+vencido+'</label><input type="datetime-local" id="seg-prox-'+i+'" value="'+isoLocalInput(s.proximo_contacto)+'" style="width:100%;padding:7px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:12.5px;box-sizing:border-box;color-scheme:dark;"></div>'
-          + '</div>'
-          + '<label style="display:block;font-size:11px;color:#9CA3AF;margin-bottom:3px;">Notas</label>'
-          + '<textarea id="seg-notas-'+i+'" rows="2" placeholder="Qué se habló, objeciones, siguiente paso…" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;">'+escapeHtml(s.notas||'')+'</textarea>'
-          + '<div style="text-align:right;margin-top:10px;"><button onclick="guardarSeguimiento(\''+escapeHtml(s.lead_email)+'\','+i+')" style="background:#F5B800;color:#0B1131;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">Guardar</button></div>'
-          + '</div>';
-      }).join('');
-      filtrados.forEach(function(s, i){ var sel = $('seg-estado-'+i); if (sel) sel.value = s.estado_cierre; });
-      window._segFiltrados = filtrados;
-    };
-    window.guardarSeguimiento = function(email, i){
-      var estado = $('seg-estado-'+i).value;
-      var prox = $('seg-prox-'+i).value;
-      var notas = $('seg-notas-'+i).value;
-      var proxIso = prox ? new Date(prox).toISOString() : '';
-      apiPost('crm_seguimiento_actualizar', { lead_email: email, estado: estado, proximo_contacto: proxIso, notas: notas }).then(function(res){
-        if (res.ok){ cargarSeguimiento(); } else { alert('Error: ' + (res.error||'')); }
-      }).catch(function(err){ alert('Error: ' + (err&&err.message?err.message:err)); });
-    };
-    window.abrirAgregarSeguimiento = function(){
-      var inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;margin-bottom:12px;box-sizing:border-box;font-size:14px;';
-      var html = '<h2 style="margin:0 0 4px;font-size:20px;">Agregar prospecto</h2>'
-        + '<p style="color:#9CA3AF;font-size:13px;margin:0 0 18px;">Entra a la bandeja como “Sin llamar”. Solo el correo es obligatorio.</p>'
-        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Correo *</label><input id="seg-add-email" type="email" placeholder="prospecto@correo.com" style="'+inp+'">'
-        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Nombre</label><input id="seg-add-nombre" placeholder="Nombre y apellido" style="'+inp+'">'
-        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Teléfono</label><input id="seg-add-telefono" placeholder="+57 300 000 0000" style="'+inp+'">'
-        + '<label style="display:block;font-size:12px;color:#9CA3AF;margin-bottom:4px;">Capital con el que trabaja <span style="color:#6B7280;">(opcional)</span></label><input id="seg-add-capital" placeholder="Ej. 5.000 USD" style="'+inp+'">'
-        + '<div id="seg-add-msg" style="font-size:12.5px;color:#f87171;min-height:16px;margin-bottom:6px;"></div>'
-        + '<div style="display:flex;gap:10px;"><button onclick="guardarNuevoSeguimiento()" style="flex:1;background:#F5B800;color:#0B1131;border:none;padding:13px;border-radius:8px;font-weight:700;cursor:pointer;">Agregar</button><button onclick="cerrarModalSeguimiento()" style="background:rgba(255,255,255,0.08);color:#fff;border:none;padding:13px 20px;border-radius:8px;cursor:pointer;">Cancelar</button></div>';
-      $('modal-seguimiento-content').innerHTML = html;
-      $('modal-seguimiento').style.display = 'flex';
-      setTimeout(function(){ var e = $('seg-add-email'); if (e) e.focus(); }, 50);
-    };
-    window.cerrarModalSeguimiento = function(){ $('modal-seguimiento').style.display = 'none'; };
-    window.importarInscritosSeguimiento = function(){
-      if (!confirm('Esto trae al pipeline a todos los inscritos del webinar que aún no estén, heredando el Titán que ya tienen asignado. ¿Continuar?')) return;
-      var btn = $('seg-btn-importar'); if (btn){ btn.disabled = true; btn.textContent = 'Importando…'; }
-      apiPost('crm_seguimiento_importar', {}).then(function(res){
-        if (btn){ btn.disabled = false; btn.textContent = 'Importar inscritos'; }
-        if (res.ok){ alert('Importados: ' + res.importados + '\nYa estaban: ' + (res.ya_estaban||0)); cargarSeguimiento(); }
-        else { alert('Error: ' + (res.error||'')); }
-      }).catch(function(err){ if (btn){ btn.disabled = false; btn.textContent = 'Importar inscritos'; } alert('Error: ' + (err&&err.message?err.message:err)); });
-    };
-    window.guardarNuevoSeguimiento = function(){
-      var email = ($('seg-add-email').value || '').trim();
-      var msg = $('seg-add-msg');
-      if (!email || email.indexOf('@') < 0){ msg.textContent = 'Pon un correo válido.'; return; }
-      var datos = { lead_email: email, nombre: ($('seg-add-nombre').value||'').trim(), telefono: ($('seg-add-telefono').value||'').trim(), capital: ($('seg-add-capital').value||'').trim(), fuente: 'manual' };
-      msg.style.color = '#9CA3AF'; msg.textContent = 'Guardando…';
-      apiPost('crm_seguimiento_agregar', datos).then(function(res){
-        if (res.ok){ cerrarModalSeguimiento(); cargarSeguimiento(); }
-        else { msg.style.color = '#f87171'; msg.textContent = res.error || 'No se pudo agregar'; }
-      }).catch(function(err){ msg.style.color = '#f87171'; msg.textContent = 'Error: ' + (err&&err.message?err.message:err); });
-    };
-// ============================================================
-// REEMPLAZA tu función window.exportarWAPI EN EL CRM por esta. (v4)
-// ------------------------------------------------------------
-// Requiere el backend corregido (crmMarcarContactado funcionando y
-// crmEngagementInscritos devolviendo `contactado`).
-//
-//  - Excluye a quienes YA contactaste (marca real del servidor: c.contactado),
-//    además de confirmados / no_asistirá. Así NUNCA repite.
-//  - Respaldo extra: historial en localStorage (por si exportas dos veces
-//    en la misma sesión, antes de refrescar la pestaña Confirmación).
-//  - Mensaje MADURO -> chistoso (abre por el registro, baja suave a lo gracioso).
-//  - Hora local por país. Sin link en el primer contacto (pregunta si quiere el
-//    acceso); el link se lo pasas cuando responda "claro que quiero".
-//  - Mantiene el formato telefono,email,mensaje,token (la extensión no cambia).
-// ============================================================
-window.exportarWAPI = function() {
-  if (confCache.length === 0) { alert('No hay contactos cargados. Primero ve a la pestaña Confirmación.'); return; }
-
-  // Fecha por grupo del lead (18 latam_bajo / 19 latam_alto / 20 europa).
-  // Si cambias las fechas del evento, actualízalas aquí también.
-  var FECHA_POR_GRUPO = {
-    latam_bajo: 'el jueves 18 de junio',
-    latam_alto: 'el viernes 19 de junio',
-    europa: 'el sábado 20 de junio'
-  };
-
-  // Respaldo de sesión (el filtro principal es c.contactado del servidor)
-  var HKEY = 'wapi_exportados';
-  var hist = {};
-  try { hist = JSON.parse(localStorage.getItem(HKEY) || '{}'); } catch (e) { hist = {}; }
-
-  var exportables = confCache.filter(function(c) {
-    var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
-    if (tel.length < 8) return false;
-    if (c.confirmacion === 'confirmado' || c.confirmacion === 'no_asistira') return false;
-    if (c.contactado) return false;   // <-- marca REAL del servidor: ya lo contactaste
-    if (hist[tel]) return false;       // <-- respaldo misma sesión
-    return true;
-  });
-
-  if (exportables.length === 0) {
-    alert('No quedan contactos nuevos por enviar.\n\nTodos los pendientes ya fueron contactados (o están confirmados / no asistirán).');
-    return;
-  }
-
-  var LIMITE_LOTE = 50;
-  var lote = exportables.slice(0, LIMITE_LOTE);
-
-  // ── Hora local por país (base 8 PM Colombia, UTC-5) ──
-  var OFFSET_COL = -5;
-  var OFFSETS = {
-    'colombia':-5,'peru':-5,'perú':-5,'ecuador':-5,'panama':-5,'panamá':-5,
-    'mexico':-6,'méxico':-6,'guatemala':-6,'honduras':-6,'el salvador':-6,'nicaragua':-6,'costa rica':-6,
-    'venezuela':-4,'bolivia':-4,'republica dominicana':-4,'dominican republic':-4,'puerto rico':-4,'paraguay':-4,
-    'chile':-3,'argentina':-3,'uruguay':-3,'brasil':-3,'brazil':-3,
-    'espana':2,'españa':2,'spain':2,'italia':2,'francia':2,'alemania':2,'holanda':2,'suiza':2,
-    'portugal':1,'reino unido':1,'uk':1,
-    'estados unidos':-5,'united states':-5,'usa':-5,'eeuu':-5
-  };
-  function horaLocal(pais) {
-    var p = String(pais || '').toLowerCase().trim();
-    var off = OFFSETS.hasOwnProperty(p) ? OFFSETS[p] : OFFSET_COL;
-    var h = 20 + (off - OFFSET_COL); var dia = '';
-    if (h >= 24) { h -= 24; dia = ' (madrugada del día siguiente)'; }
-    if (h < 0)   { h += 24; dia = ' (noche anterior)'; }
-    var ampm = h >= 12 ? 'PM' : 'AM'; var h12 = h % 12; if (h12 === 0) h12 = 12;
-    var nombre = p ? (p.charAt(0).toUpperCase() + p.slice(1)) : 'tu país';
-    return h12 + ':00 ' + ampm + ' hora de ' + nombre + dia;
-  }
-
-  var TOKEN = token || '';
-  var filas = [['telefono', 'email', 'mensaje', TOKEN]];
-
-  lote.forEach(function(c) {
-    var tel = String(c.telefono || '').replace(/[^0-9]/g, '');
-    var email = String(c.email || '');
-    var pn = String(c.nombre || '').split(' ')[0];
-    pn = pn.charAt(0).toUpperCase() + pn.slice(1).toLowerCase();
-    var horaTxt = horaLocal(c.pais);
-    var FECHA_TXT = FECHA_POR_GRUPO[c.grupo] || FECHA_POR_GRUPO.latam_bajo;
-
-    var mensaje =
-      'Hola ' + pn + ' 👋 Te escribo porque te registraste a Money Magnet, y quería darte la bienvenida personalmente.\n\n' +
-      'Te registraste porque sabes que tu dinero puede hacer mucho más que quedarse quieto — y tienes toda la razón. Lo que pasa es que a casi nadie le enseñaron las reglas del juego del dinero, así que terminamos trabajando cada vez más y aun así sin avanzar (a todos nos pasó, jaja).\n\n' +
-      'El evento es ' + FECHA_TXT + ' a las ' + horaTxt + '. Ahí te enseño esas reglas paso a paso para que aprendas a multiplicar tu dinero 🔥\n\n' +
-      'Por cierto, tengo unos canales de WhatsApp y Telegram donde comparto toda la info del evento. ¿Quieres que te pase el acceso?';
-
-    mensaje = mensaje.replace(/"/g, '""');
-    filas.push([tel, '"' + email + '"', '"' + mensaje + '"', '']);
-
-    hist[tel] = true; // respaldo de sesión
-  });
-
-  try { localStorage.setItem(HKEY, JSON.stringify(hist)); } catch (e) {}
-
-  var csv = filas.map(function(f) { return f.join(','); }).join('\n');
-  var BOM = '\uFEFF';
-  var blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-  var link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  var fecha = new Date().toISOString().slice(0, 10);
-  link.download = 'wapi_moneymagnet_' + fecha + '.csv';
-  link.click();
-
-  alert(
-    'CSV descargado con ' + lote.length + ' contactos NUEVOS.\n\n' +
-    'Ya no aparecen los que contactaste antes (la extensión los marca en el CRM al enviar).\n\n' +
-    'Quedan ' + (exportables.length - lote.length) + ' nuevos en cola para el siguiente lote.\n\n' +
-    'Cárgalo en la extensión igual que siempre.'
-  );
-};
     function cargarComisiones() {
       $('btn-reprocesar-com').style.display = (userRol === 'admin') ? '' : 'none';
       $('comisiones-lista').innerHTML = '<div style="color:#9CA3AF;">Cargando&hellip;</div>';
